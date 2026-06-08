@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, FlatList,
+  ActivityIndicator, FlatList, Image,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedStackParamList } from '@/types';
@@ -111,8 +111,16 @@ export function FindPeopleScreen({ navigation }: Props) {
           const isFollowing = following.has(item.id);
           const isPending = pending.has(item.id);
           return (
-            <View style={styles.row}>
-              <View style={styles.avatar} />
+            <TouchableOpacity
+              style={styles.row}
+              onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
+              activeOpacity={0.7}
+            >
+              {item.avatar_url ? (
+                <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatar} />
+              )}
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.handle} numberOfLines={1}>@{item.handle}</Text>
@@ -127,7 +135,7 @@ export function FindPeopleScreen({ navigation }: Props) {
                   {isFollowing ? 'Following' : 'Follow'}
                 </Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           );
         }}
       />

@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { FeedStackParamList } from '@/types';
 import { FeedScreen } from '@/screens/feed/FeedScreen';
 import { FindPeopleScreen } from '@/screens/feed/FindPeopleScreen';
+import { UserProfileScreen } from '@/screens/profile/UserProfileScreen';
 
 const Stack = createNativeStackNavigator<FeedStackParamList>();
 
@@ -11,6 +12,7 @@ export function FeedNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="FeedHome" component={FeedScreen} />
       <Stack.Screen name="FindPeople" component={FindPeopleScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     </Stack.Navigator>
   );
 }

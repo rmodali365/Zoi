@@ -113,9 +113,11 @@ export type LogStackParamList = {
 export type FeedStackParamList = {
   FeedHome: undefined;
   FindPeople: undefined;
+  UserProfile: { userId: string };
 };
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   TripDetail: { tripId: string };
+  UserProfile: { userId: string };
 };

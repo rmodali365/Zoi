@@ -58,7 +58,12 @@ export function FeedScreen({ navigation }: Props) {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ExperienceCard item={item} />}
+          renderItem={({ item }) => (
+            <ExperienceCard
+              item={item}
+              onPressAuthor={() => navigation.navigate('UserProfile', { userId: item.user_id })}
+            />
+          )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}

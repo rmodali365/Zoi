@@ -5,7 +5,8 @@ import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 const CARD = 140;
 
-export function SuggestedUsers() {
+// onPressUser, when provided, opens a user's profile when their card is tapped.
+export function SuggestedUsers({ onPressUser }: { onPressUser?: (id: string) => void }) {
   const [users, setUsers] = useState<UserResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [followed, setFollowed] = useState<Set<string>>(new Set());
@@ -54,7 +55,13 @@ export function SuggestedUsers() {
           : users.map((u) => {
               const isFollowed = followed.has(u.id);
               return (
-                <View key={u.id} style={styles.card}>
+                <TouchableOpacity
+                  key={u.id}
+                  style={styles.card}
+                  onPress={() => onPressUser?.(u.id)}
+                  disabled={!onPressUser}
+                  activeOpacity={0.8}
+                >
                   {u.avatar_url ? (
                     <Image source={{ uri: u.avatar_url }} style={styles.avatar} />
                   ) : (
@@ -72,7 +79,7 @@ export function SuggestedUsers() {
                       {isFollowed ? 'Following' : 'Follow'}
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               );
             })}
       </ScrollView>

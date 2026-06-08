@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { FeedItem } from '@/lib/feed';
 import { SENTIMENT_EMOJI, SENTIMENT_LABELS, TAG_LABELS } from '@/constants/experiences';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
@@ -18,21 +18,36 @@ function timeAgo(iso: string): string {
   return `${Math.floor(d / 30)}mo`;
 }
 
-export function ExperienceCard({ item }: { item: FeedItem }) {
+type Props = {
+  item: FeedItem;
+  // When provided, tapping the author opens their profile.
+  onPressAuthor?: () => void;
+};
+
+export function ExperienceCard({ item, onPressAuthor }: Props) {
   const author = item.user;
   const place = [item.location.city, item.location.region].filter(Boolean).join(', ');
 
   return (
     <View style={styles.card}>
       {/* Author */}
-      <View style={styles.head}>
-        <View style={styles.avatar} />
+      <TouchableOpacity
+        style={styles.head}
+        onPress={onPressAuthor}
+        disabled={!onPressAuthor}
+        activeOpacity={0.7}
+      >
+        {author?.avatar_url ? (
+          <Image source={{ uri: author.avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatar} />
+        )}
         <View style={styles.headInfo}>
           <Text style={styles.author} numberOfLines={1}>{author?.name ?? 'Someone'}</Text>
           <Text style={styles.handle} numberOfLines={1}>@{author?.handle ?? '…'}</Text>
         </View>
         <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
-      </View>
+      </TouchableOpacity>
 
       {/* Photo */}
       {item.photos.length > 0 && (
