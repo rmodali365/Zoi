@@ -89,9 +89,9 @@ export type AuthStackParamList = {
 
 export type AppTabParamList = {
   Feed: undefined;
+  List: undefined;
   Log: undefined;
   Profile: { userId?: string };
-  Search: undefined;
 };
 
 // Draft passed from AddExperience into the ranking step before insert

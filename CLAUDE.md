@@ -50,14 +50,15 @@ src/
   navigation/
     index.tsx               # RootNavigator: session+profile -> App, else Auth
     AuthNavigator.tsx       # Welcome -> PhoneAuth -> VerifyOtp -> SetupProfile
-    AppNavigator.tsx        # bottom tabs: Feed / Log / Profile / Search
+    AppNavigator.tsx        # bottom tabs (w/ Ionicons): Feed / My List / Log / Profile
     LogNavigator.tsx        # Log tab stack (see Log flow below)
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
-    feed/FeedScreen.tsx     # stub
+    feed/FeedScreen.tsx     # stub (friends' experiences — not wired yet)
+    list/MyListScreen.tsx   # your experiences ranked per sentiment tier w/ scores (wired)
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
-    profile/ProfileScreen.tsx  # has sign out; ranked lists not yet wired
-    search/SearchScreen.tsx # stub
+    profile/ProfileScreen.tsx  # sign out; account view (ranked lists now live in My List)
+    search/SearchScreen.tsx # stub, NOT mounted in tabs (kept for later repurpose)
 supabase/
   migrations/               # SOURCE OF TRUTH for the DB (see DB section)
   schema.sql                # generated snapshot, read-only
