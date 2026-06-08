@@ -1,10 +1,9 @@
--- Zoi schema — GENERATED SNAPSHOT of the full current database.
--- This file is NOT applied to the DB. The source of truth is supabase/migrations/.
--- To change the schema, add a new migration file (see supabase/README.md), then
--- update this snapshot to match. Do not hand-edit this to make schema changes.
+-- Baseline migration: full Zoi schema as of 2026-06-08.
+-- Squashed from the project's initial setup + the trips/sentiment rework.
+-- Idempotent so it can run safely on a fresh DB or the existing live DB.
 
 -- Users (extends Supabase auth.users)
-create table public.users (
+create table if not exists public.users (
   id uuid references auth.users(id) on delete cascade primary key,
   name text not null default '',
   handle text unique not null default '',
@@ -15,18 +14,21 @@ create table public.users (
 
 alter table public.users enable row level security;
 
+drop policy if exists "Users can read all profiles" on public.users;
 create policy "Users can read all profiles"
   on public.users for select using (true);
 
+drop policy if exists "Users can update their own profile" on public.users;
 create policy "Users can update their own profile"
   on public.users for update using (auth.uid() = id);
 
+drop policy if exists "Users can insert their own profile" on public.users;
 create policy "Users can insert their own profile"
   on public.users for insert with check (auth.uid() = id);
 
 
 -- Follows (one-way, Twitter-style)
-create table public.follows (
+create table if not exists public.follows (
   follower_id uuid references public.users(id) on delete cascade,
   following_id uuid references public.users(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -35,9 +37,11 @@ create table public.follows (
 
 alter table public.follows enable row level security;
 
+drop policy if exists "Anyone can read follows" on public.follows;
 create policy "Anyone can read follows"
   on public.follows for select using (true);
 
+drop policy if exists "Users can manage their own follows" on public.follows;
 create policy "Users can manage their own follows"
   on public.follows for all using (auth.uid() = follower_id);
 
@@ -53,7 +57,7 @@ $$;
 
 
 -- Trips: containers that group experiences (not ranked themselves)
-create table public.trips (
+create table if not exists public.trips (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.users(id) on delete cascade not null,
   title text not null,
@@ -67,6 +71,7 @@ create table public.trips (
 
 alter table public.trips enable row level security;
 
+drop policy if exists "Users can read trips from people they follow" on public.trips;
 create policy "Users can read trips from people they follow"
   on public.trips for select
   using (
@@ -77,16 +82,18 @@ create policy "Users can read trips from people they follow"
     )
   );
 
+drop policy if exists "Users can manage their own trips" on public.trips;
 create policy "Users can manage their own trips"
   on public.trips for all using (auth.uid() = user_id);
 
+drop trigger if exists trips_updated_at on public.trips;
 create trigger trips_updated_at
   before update on public.trips
   for each row execute function update_updated_at();
 
 
 -- Experiences: the atomic, rankable unit
-create table public.experiences (
+create table if not exists public.experiences (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.users(id) on delete cascade not null,
   -- Sentiment tier drives ranking scope and score range
@@ -106,6 +113,7 @@ create table public.experiences (
 
 alter table public.experiences enable row level security;
 
+drop policy if exists "Users can read experiences from people they follow" on public.experiences;
 create policy "Users can read experiences from people they follow"
   on public.experiences for select
   using (
@@ -116,24 +124,26 @@ create policy "Users can read experiences from people they follow"
     )
   );
 
+drop policy if exists "Users can manage their own experiences" on public.experiences;
 create policy "Users can manage their own experiences"
   on public.experiences for all using (auth.uid() = user_id);
 
 -- Index for fast ranked list lookup (ranking is scoped per sentiment tier)
-create index experiences_user_sentiment_rank
+create index if not exists experiences_user_sentiment_rank
   on public.experiences (user_id, sentiment, rank_key);
 
 -- Index for fetching a trip's experiences
-create index experiences_trip
+create index if not exists experiences_trip
   on public.experiences (trip_id);
 
+drop trigger if exists experiences_updated_at on public.experiences;
 create trigger experiences_updated_at
   before update on public.experiences
   for each row execute function update_updated_at();
 
 
 -- Saves (want-to-do list)
-create table public.saves (
+create table if not exists public.saves (
   user_id uuid references public.users(id) on delete cascade,
   experience_id uuid references public.experiences(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -142,8 +152,10 @@ create table public.saves (
 
 alter table public.saves enable row level security;
 
+drop policy if exists "Users can read their own saves" on public.saves;
 create policy "Users can read their own saves"
   on public.saves for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can manage their own saves" on public.saves;
 create policy "Users can manage their own saves"
   on public.saves for all using (auth.uid() = user_id);
