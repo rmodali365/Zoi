@@ -40,17 +40,63 @@ create policy "Users can manage their own follows"
   on public.follows for all using (auth.uid() = follower_id);
 
 
--- Experiences
+-- Auto-update updated_at (shared by trips + experiences)
+create or replace function update_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+
+-- Trips: containers that group experiences (not ranked themselves)
+create table public.trips (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.users(id) on delete cascade not null,
+  title text not null,
+  destination text,
+  start_date date,
+  end_date date,
+  cover_photo text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.trips enable row level security;
+
+create policy "Users can read trips from people they follow"
+  on public.trips for select
+  using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.follows
+      where follower_id = auth.uid() and following_id = trips.user_id
+    )
+  );
+
+create policy "Users can manage their own trips"
+  on public.trips for all using (auth.uid() = user_id);
+
+create trigger trips_updated_at
+  before update on public.trips
+  for each row execute function update_updated_at();
+
+
+-- Experiences: the atomic, rankable unit
 create table public.experiences (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.users(id) on delete cascade not null,
-  bucket text not null check (bucket in ('single', 'day_trip', 'weekend', 'trip')),
+  -- Sentiment tier drives ranking scope and score range
+  sentiment text not null check (sentiment in ('loved', 'liked', 'fine')),
+  -- Optional membership in a trip container
+  trip_id uuid references public.trips(id) on delete set null,
   -- Location stored as structured JSON
   location jsonb not null,
   tags text[] not null default '{}',
   photos text[] not null default '{}',
   quick_take text not null default '',
-  -- Fractional index string for ordering within (user_id, bucket)
+  -- Fractional index string for ordering within (user_id, sentiment)
   rank_key text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -71,18 +117,13 @@ create policy "Users can read experiences from people they follow"
 create policy "Users can manage their own experiences"
   on public.experiences for all using (auth.uid() = user_id);
 
--- Index for fast ranked list lookup
-create index experiences_user_bucket_rank
-  on public.experiences (user_id, bucket, rank_key);
+-- Index for fast ranked list lookup (ranking is scoped per sentiment tier)
+create index experiences_user_sentiment_rank
+  on public.experiences (user_id, sentiment, rank_key);
 
--- Auto-update updated_at
-create or replace function update_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+-- Index for fetching a trip's experiences
+create index experiences_trip
+  on public.experiences (trip_id);
 
 create trigger experiences_updated_at
   before update on public.experiences

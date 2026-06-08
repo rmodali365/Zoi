@@ -1,12 +1,22 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
-import { Bucket } from '@/types';
-import { BUCKET_LABELS } from '@/constants/buckets';
-
-const BUCKETS: Bucket[] = ['single', 'day_trip', 'weekend', 'trip'];
+import { SENTIMENTS, SENTIMENT_LABELS } from '@/constants/experiences';
+import { supabase } from '@/lib/supabase';
 
 export function ProfileScreen() {
+  function handleSignOut() {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        // RootNavigator's onAuthStateChange switches back to Auth automatically
+        onPress: () => supabase.auth.signOut(),
+      },
+    ]);
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -17,13 +27,16 @@ export function ProfileScreen() {
             <Text style={styles.name}>Your Name</Text>
             <Text style={styles.handle}>@handle</Text>
           </View>
+          <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
+            <Text style={styles.signOut}>Sign out</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Bucket tabs */}
+        {/* Sentiment tabs */}
         <View style={styles.bucketTabs}>
-          {BUCKETS.map((bucket) => (
-            <TouchableOpacity key={bucket} style={styles.bucketTab} activeOpacity={0.7}>
-              <Text style={styles.bucketTabText}>{BUCKET_LABELS[bucket]}</Text>
+          {SENTIMENTS.map((sentiment) => (
+            <TouchableOpacity key={sentiment} style={styles.bucketTab} activeOpacity={0.7}>
+              <Text style={styles.bucketTabText}>{SENTIMENT_LABELS[sentiment]}</Text>
               <Text style={styles.bucketCount}>0</Text>
             </TouchableOpacity>
           ))}
@@ -59,6 +72,7 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
   bucketTabs: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.xl,

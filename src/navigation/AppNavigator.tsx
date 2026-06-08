@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AppTabParamList } from '@/types';
 import { FeedScreen } from '@/screens/feed/FeedScreen';
-import { LogScreen } from '@/screens/log/LogScreen';
+import { LogNavigator } from '@/navigation/LogNavigator';
 import { ProfileScreen } from '@/screens/profile/ProfileScreen';
 import { SearchScreen } from '@/screens/search/SearchScreen';
 import { COLORS } from '@/constants/theme';
@@ -32,7 +32,7 @@ export function AppNavigator() {
       />
       <Tab.Screen
         name="Log"
-        component={LogScreen}
+        component={LogNavigator}
         options={{ tabBarLabel: 'Log' }}
       />
       <Tab.Screen

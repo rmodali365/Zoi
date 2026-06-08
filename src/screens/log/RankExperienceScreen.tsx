@@ -1,0 +1,206 @@
+import React, { useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
+} from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+import { LogStackParamList, Experience, Sentiment } from '@/types';
+import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI } from '@/constants/experiences';
+import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
+import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
+
+type Props = {
+  navigation: NativeStackNavigationProp<LogStackParamList, 'RankExperience'>;
+  route: RouteProp<LogStackParamList, 'RankExperience'>;
+};
+
+export function RankExperienceScreen({ navigation, route }: Props) {
+  const { draft } = route.params;
+
+  const [phase, setPhase] = useState<'sentiment' | 'comparing' | 'saving'>('sentiment');
+  const [sentiment, setSentiment] = useState<Sentiment | null>(null);
+  const [pool, setPool] = useState<Experience[]>([]);
+  // Binary-search window: insert position lands at `lo` once lo === hi.
+  const [lo, setLo] = useState(0);
+  const [hi, setHi] = useState(0);
+
+  async function handlePickSentiment(s: Sentiment) {
+    setSentiment(s);
+    setPhase('saving');
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      Alert.alert('Error', 'Session expired.');
+      return;
+    }
+
+    const { data } = await supabase
+      .from('experiences')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('sentiment', s)
+      .order('rank_key', { ascending: true });
+
+    const existing = (data ?? []) as Experience[];
+    setPool(existing);
+
+    if (existing.length === 0) {
+      // First in this tier — auto #1
+      await save(s, initialRankKey(), true);
+      return;
+    }
+
+    setLo(0);
+    setHi(existing.length);
+    setPhase('comparing');
+  }
+
+  // User chose which experience they enjoyed more.
+  function handleChoice(newIsBetter: boolean) {
+    const mid = (lo + hi) >> 1;
+    let nextLo = lo;
+    let nextHi = hi;
+    if (newIsBetter) nextHi = mid;
+    else nextLo = mid + 1;
+
+    if (nextLo >= nextHi) {
+      finalize(nextLo);
+    } else {
+      setLo(nextLo);
+      setHi(nextHi);
+    }
+  }
+
+  function rankKeyForPosition(pos: number): string {
+    if (pos === 0) return keyBefore(pool[0].rank_key);
+    if (pos >= pool.length) return keyAfter(pool[pool.length - 1].rank_key);
+    return keyBetween(pool[pos - 1].rank_key, pool[pos].rank_key);
+  }
+
+  async function finalize(pos: number) {
+    if (!sentiment) return;
+    setPhase('saving');
+    await save(sentiment, rankKeyForPosition(pos), false);
+  }
+
+  async function save(s: Sentiment, rankKey: string, isFirst: boolean) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from('experiences').insert({
+      user_id: user.id,
+      sentiment: s,
+      trip_id: draft.trip_id,
+      location: draft.location,
+      tags: draft.tags,
+      photos: draft.photos,
+      quick_take: draft.quick_take,
+      rank_key: rankKey,
+    });
+
+    if (error) {
+      Alert.alert('Error', error.message);
+      setPhase('comparing');
+      return;
+    }
+
+    const place = draft.location.name;
+    Alert.alert(
+      isFirst ? '🎉 First one!' : 'Ranked!',
+      isFirst
+        ? `${place} is your #1 ${SENTIMENT_LABELS[s].toLowerCase()} experience. You started your list!`
+        : `${place} is in.`,
+      [{ text: 'Done', onPress: () => navigation.popToTop() }],
+    );
+  }
+
+  if (phase === 'saving') {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={COLORS.text} />
+      </SafeAreaView>
+    );
+  }
+
+  if (phase === 'sentiment') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.topBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
+            <Text style={styles.cancel}>Back</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.content}>
+          <Text style={styles.title}>How was it?</Text>
+          <Text style={styles.subtitle}>{draft.location.name}</Text>
+          <View style={styles.sentiments}>
+            {SENTIMENTS.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={styles.sentimentCard}
+                onPress={() => handlePickSentiment(s)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.sentimentEmoji}>{SENTIMENT_EMOJI[s]}</Text>
+                <Text style={styles.sentimentLabel}>{SENTIMENT_LABELS[s]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Comparing phase
+  const mid = (lo + hi) >> 1;
+  const opponent = pool[mid];
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Which did you enjoy more?</Text>
+        <View style={styles.compareRow}>
+          <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(true)} activeOpacity={0.85}>
+            <Text style={styles.compareName}>{draft.location.name}</Text>
+            <Text style={styles.compareTag}>New</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.vs}>vs</Text>
+
+          <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(false)} activeOpacity={0.85}>
+            <Text style={styles.compareName}>{opponent?.location?.name ?? 'Experience'}</Text>
+            <Text style={styles.compareTag}>Ranked</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  centered: { alignItems: 'center', justifyContent: 'center' },
+  topBar: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md },
+  cancel: { fontSize: 15, color: COLORS.textSecondary },
+  content: { flex: 1, paddingHorizontal: SPACING.xl, justifyContent: 'center', gap: SPACING.lg },
+  title: { fontSize: 26, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5, textAlign: 'center' },
+  subtitle: { fontSize: 16, color: COLORS.textSecondary, textAlign: 'center', marginTop: -SPACING.sm },
+  sentiments: { gap: SPACING.md, marginTop: SPACING.lg },
+  sentimentCard: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderRadius: RADIUS.lg, padding: SPACING.lg,
+  },
+  sentimentEmoji: { fontSize: 28 },
+  sentimentLabel: { fontSize: 18, ...FONT.semibold, color: COLORS.text },
+  compareRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  compareCard: {
+    flex: 1, minHeight: 140, backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg,
+    padding: SPACING.lg, alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
+  },
+  compareName: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
+  compareTag: { fontSize: 12, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  vs: { fontSize: 14, ...FONT.medium, color: COLORS.textMuted },
+});

@@ -1,13 +1,10 @@
-export type Bucket = 'single' | 'day_trip' | 'weekend' | 'trip';
+// Sentiment tier — drives ranking scope and score range
+export type Sentiment = 'loved' | 'liked' | 'fine';
 
 export type Tag =
-  // Single experience
   | 'outdoors' | 'drinks' | 'culture' | 'nightlife' | 'active' | 'chill' | 'food-adjacent'
-  // Day trip
   | 'wine' | 'beach' | 'ski' | 'food-focused' | 'scenic-drive'
-  // Weekend trip
   | 'city' | 'nature' | 'party' | 'romantic' | 'adventure'
-  // Trip
   | 'international' | 'domestic' | 'relaxation';
 
 export interface User {
@@ -35,20 +32,38 @@ export interface Location {
   country?: string;
 }
 
+export interface Trip {
+  id: string;
+  user_id: string;
+  title: string;
+  destination: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  cover_photo: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: User;
+  experiences?: Experience[];
+}
+
 export interface Experience {
   id: string;
   user_id: string;
-  bucket: Bucket;
+  sentiment: Sentiment;
+  // Optional membership in a trip container
+  trip_id: string | null;
   location: Location;
   tags: Tag[];
   photos: string[];
   quick_take: string;
-  // Fractional rank string (e.g. "0|hzzzzz:") — lower sorts first
+  // Fractional rank string — lower sorts first, scoped within (user_id, sentiment)
   rank_key: string;
   created_at: string;
   updated_at: string;
   // Joined
   user?: User;
+  trip?: Trip;
 }
 
 export interface Save {
@@ -68,7 +83,7 @@ export type AuthStackParamList = {
   Welcome: undefined;
   PhoneAuth: undefined;
   VerifyOtp: { phone: string };
-  Onboarding: undefined;
+  SetupProfile: { phone: string };
 };
 
 export type AppTabParamList = {
@@ -76,4 +91,20 @@ export type AppTabParamList = {
   Log: undefined;
   Profile: { userId?: string };
   Search: undefined;
+};
+
+// Draft passed from AddExperience into the ranking step before insert
+export type ExperienceDraft = {
+  location: Location;
+  tags: Tag[];
+  photos: string[];
+  quick_take: string;
+  trip_id: string | null;
+};
+
+export type LogStackParamList = {
+  LogHome: undefined;
+  AddExperience: { tripId?: string } | undefined;
+  RankExperience: { draft: ExperienceDraft };
+  StartTrip: undefined;
 };

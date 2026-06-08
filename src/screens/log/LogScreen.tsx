@@ -1,38 +1,45 @@
 import React from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { LogStackParamList } from '@/types';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
-import { Bucket } from '@/types';
-import { BUCKET_LABELS, BUCKET_DESCRIPTIONS } from '@/constants/buckets';
 
-const BUCKETS: Bucket[] = ['single', 'day_trip', 'weekend', 'trip'];
+type Props = {
+  navigation: NativeStackNavigationProp<LogStackParamList, 'LogHome'>;
+};
 
-export function LogScreen() {
-  function handleBucketSelect(_bucket: Bucket) {
-    // TODO: navigate to AddExperienceScreen with bucket pre-selected
-  }
-
+export function LogScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Log an experience</Text>
-        <Text style={styles.subtitle}>What did you do?</Text>
+        <Text style={styles.title}>Add to your taste</Text>
+        <Text style={styles.subtitle}>Log something you did, or start a trip to group experiences.</Text>
       </View>
 
-      <View style={styles.buckets}>
-        {BUCKETS.map((bucket) => (
-          <TouchableOpacity
-            key={bucket}
-            style={styles.bucketRow}
-            onPress={() => handleBucketSelect(bucket)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.bucketInfo}>
-              <Text style={styles.bucketLabel}>{BUCKET_LABELS[bucket]}</Text>
-              <Text style={styles.bucketDesc}>{BUCKET_DESCRIPTIONS[bucket]}</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.options}>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('AddExperience')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.cardEmoji}>📍</Text>
+          <Text style={styles.cardTitle}>Log an experience</Text>
+          <Text style={styles.cardDesc}>
+            A hike, a dinner, a bar, a museum — one thing you did. Rank it against your favorites.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('StartTrip')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.cardEmoji}>🧳</Text>
+          <Text style={styles.cardTitle}>Start a trip</Text>
+          <Text style={styles.cardDesc}>
+            A container for experiences. Add things you've done, or keep it empty and fill it as you go.
+          </Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -46,22 +53,16 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
   },
   title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 16, color: COLORS.textSecondary, marginTop: SPACING.xs },
-  buckets: {
-    paddingHorizontal: SPACING.xl,
-    gap: SPACING.sm,
-  },
-  bucketRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  subtitle: { fontSize: 16, color: COLORS.textSecondary, marginTop: SPACING.xs, lineHeight: 22 },
+  options: { paddingHorizontal: SPACING.xl, gap: SPACING.md },
+  card: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
   },
-  bucketInfo: { flex: 1 },
-  bucketLabel: { fontSize: 17, ...FONT.semibold, color: COLORS.text },
-  bucketDesc: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
-  chevron: { fontSize: 22, color: COLORS.textMuted, paddingLeft: SPACING.sm },
+  cardEmoji: { fontSize: 32, marginBottom: SPACING.sm },
+  cardTitle: { fontSize: 19, ...FONT.semibold, color: COLORS.text },
+  cardDesc: { fontSize: 14, color: COLORS.textMuted, marginTop: SPACING.xs, lineHeight: 20 },
 });

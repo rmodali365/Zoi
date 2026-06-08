@@ -21,7 +21,7 @@ export function VerifyOtpScreen({ navigation, route }: Props) {
 
   async function handleVerify() {
     setLoading(true);
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       phone,
       token: otp,
       type: 'sms',
@@ -32,9 +32,22 @@ export function VerifyOtpScreen({ navigation, route }: Props) {
       Alert.alert('Invalid code', 'Please check the code and try again.');
       return;
     }
-    // Auth state change in RootNavigator will handle redirect,
-    // but navigate to Onboarding for new users
-    navigation.navigate('Onboarding');
+
+    // Check if this user already has a profile row
+    const userId = data.user?.id;
+    if (!userId) return;
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!profile) {
+      // New user — collect their name and handle
+      navigation.navigate('SetupProfile', { phone });
+    }
+    // Returning user — RootNavigator's onAuthStateChange will switch to App automatically
   }
 
   return (
