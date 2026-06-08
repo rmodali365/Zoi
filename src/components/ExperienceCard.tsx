@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { FeedItem } from '@/lib/feed';
 import { SENTIMENT_EMOJI, SENTIMENT_LABELS, TAG_LABELS } from '@/constants/experiences';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
@@ -18,7 +19,14 @@ function timeAgo(iso: string): string {
   return `${Math.floor(d / 30)}mo`;
 }
 
-export function ExperienceCard({ item }: { item: FeedItem }) {
+type Props = {
+  item: FeedItem;
+  // When provided, renders a bookmark toggle reflecting `saved`.
+  saved?: boolean;
+  onToggleSave?: () => void;
+};
+
+export function ExperienceCard({ item, saved = false, onToggleSave }: Props) {
   const author = item.user;
   const place = [item.location.city, item.location.region].filter(Boolean).join(', ');
 
@@ -32,6 +40,15 @@ export function ExperienceCard({ item }: { item: FeedItem }) {
           <Text style={styles.handle} numberOfLines={1}>@{author?.handle ?? '…'}</Text>
         </View>
         <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+        {onToggleSave && (
+          <TouchableOpacity onPress={onToggleSave} hitSlop={8} activeOpacity={0.7} style={styles.saveBtn}>
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={22}
+              color={saved ? COLORS.accent : COLORS.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Photo */}
@@ -91,6 +108,7 @@ const styles = StyleSheet.create({
   author: { fontSize: 15, ...FONT.semibold, color: COLORS.text },
   handle: { fontSize: 13, color: COLORS.textMuted },
   time: { fontSize: 13, color: COLORS.textMuted },
+  saveBtn: { marginLeft: SPACING.sm },
   photo: { width: '100%', height: 220, backgroundColor: COLORS.border },
   body: { padding: SPACING.md, gap: SPACING.xs },
   name: { fontSize: 18, ...FONT.bold, color: COLORS.text },

@@ -1,16 +1,23 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
+import { getSaves, unsaveExperience, SavedExperience } from '@/lib/saves';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
+
+type ListTab = 'ranked' | 'wishlist';
 
 export function MyListScreen() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Experience[]>([]);
+  const [saved, setSaved] = useState<SavedExperience[]>([]);
+  const [tab, setTab] = useState<ListTab>('ranked');
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -18,13 +25,17 @@ export function MyListScreen() {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from('experiences')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('rank_key', { ascending: true });
+    const [{ data }, savedRows] = await Promise.all([
+      supabase
+        .from('experiences')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('rank_key', { ascending: true }),
+      getSaves().catch(() => [] as SavedExperience[]),
+    ]);
 
     setItems((data ?? []) as Experience[]);
+    setSaved(savedRows);
     setLoading(false);
   }, []);
 
@@ -34,6 +45,16 @@ export function MyListScreen() {
       load();
     }, [load]),
   );
+
+  async function handleUnsave(id: string) {
+    const prev = saved;
+    setSaved((s) => s.filter((e) => e.id !== id)); // optimistic
+    try {
+      await unsaveExperience(id);
+    } catch {
+      setSaved(prev); // revert on failure
+    }
+  }
 
   if (loading) {
     return (
@@ -48,29 +69,93 @@ export function MyListScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>My list</Text>
         <Text style={styles.subtitle}>
-          {items.length} {items.length === 1 ? 'place' : 'places'} ranked
+          {tab === 'ranked'
+            ? `${items.length} ${items.length === 1 ? 'place' : 'places'} ranked`
+            : `${saved.length} ${saved.length === 1 ? 'place' : 'places'} to do`}
         </Text>
       </View>
 
-      {items.length === 0 ? (
+      {/* Ranked / Want-to-do segmented control */}
+      <View style={styles.segment}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, tab === 'ranked' && styles.segmentBtnActive]}
+          onPress={() => setTab('ranked')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, tab === 'ranked' && styles.segmentTextActive]}>Ranked</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, tab === 'wishlist' && styles.segmentBtnActive]}
+          onPress={() => setTab('wishlist')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, tab === 'wishlist' && styles.segmentTextActive]}>Want to do</Text>
+        </TouchableOpacity>
+      </View>
+
+      {tab === 'ranked' ? (
+        items.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No experiences yet</Text>
+            <Text style={styles.emptyBody}>Log your first experience to start ranking your taste.</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+            {items.map((item, i) => (
+              <View key={item.id} style={styles.row}>
+                <View style={styles.rankBadge}>
+                  <Text style={styles.rankText}>{i + 1}</Text>
+                </View>
+                <View style={styles.info}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
+                  </Text>
+                  {!!(item.location.city || item.location.region) && (
+                    <Text style={styles.place} numberOfLines={1}>
+                      {[item.location.city, item.location.region].filter(Boolean).join(', ')}
+                    </Text>
+                  )}
+                  {item.tags.length > 0 && (
+                    <Text style={styles.tags} numberOfLines={1}>
+                      {item.tags.map((t) => TAG_LABELS[t]).join(' · ')}
+                    </Text>
+                  )}
+                </View>
+                {item.photos.length > 0 && (
+                  <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        )
+      ) : saved.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No experiences yet</Text>
-          <Text style={styles.emptyBody}>Log your first experience to start ranking your taste.</Text>
+          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+          <Text style={styles.emptyBody}>
+            Tap the bookmark on a friend's experience to add it to your want-to-do list.
+          </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {items.map((item, i) => (
+          {saved.map((item) => (
             <View key={item.id} style={styles.row}>
-              <View style={styles.rankBadge}>
-                <Text style={styles.rankText}>{i + 1}</Text>
-              </View>
+              {item.photos.length > 0 ? (
+                <Image source={{ uri: item.photos[0] }} style={styles.savedThumb} />
+              ) : (
+                <View style={[styles.savedThumb, styles.savedThumbPlaceholder]}>
+                  <Text style={styles.savedEmoji}>{SENTIMENT_EMOJI[item.sentiment]}</Text>
+                </View>
+              )}
               <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
-                </Text>
+                <Text style={styles.name} numberOfLines={1}>{item.location.name}</Text>
                 {!!(item.location.city || item.location.region) && (
                   <Text style={styles.place} numberOfLines={1}>
                     {[item.location.city, item.location.region].filter(Boolean).join(', ')}
+                  </Text>
+                )}
+                {!!item.user && (
+                  <Text style={styles.savedBy} numberOfLines={1}>
+                    {SENTIMENT_EMOJI[item.sentiment]} from @{item.user.handle}
                   </Text>
                 )}
                 {item.tags.length > 0 && (
@@ -79,9 +164,9 @@ export function MyListScreen() {
                   </Text>
                 )}
               </View>
-              {item.photos.length > 0 && (
-                <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
-              )}
+              <TouchableOpacity onPress={() => handleUnsave(item.id)} hitSlop={8} activeOpacity={0.7}>
+                <Ionicons name="bookmark" size={22} color={COLORS.accent} />
+              </TouchableOpacity>
             </View>
           ))}
         </ScrollView>
@@ -96,6 +181,27 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, paddingBottom: SPACING.md },
   title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
   subtitle: { fontSize: 15, color: COLORS.textSecondary, marginTop: SPACING.xs },
+  segment: {
+    flexDirection: 'row',
+    marginHorizontal: SPACING.xl,
+    marginBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.full,
+    padding: 3,
+    gap: 3,
+  },
+  segmentBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+  },
+  segmentBtnActive: { backgroundColor: COLORS.text },
+  segmentText: { fontSize: 14, ...FONT.semibold, color: COLORS.textSecondary },
+  segmentTextActive: { color: COLORS.background },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxl },
   row: {
     flexDirection: 'row',
@@ -117,8 +223,15 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   name: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
   place: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
+  savedBy: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
   tags: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
+  savedThumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
+  savedThumbPlaceholder: {
+    backgroundColor: COLORS.accentLight,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  savedEmoji: { fontSize: 22 },
   empty: { paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
   emptyTitle: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
