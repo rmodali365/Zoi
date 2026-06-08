@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Zoi",
+    "slug": "zoi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF8F5"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.zoi.app",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Zoi uses your contacts to find friends already on the app.",
+        "NSLocationWhenInUseUsageDescription": "Zoi uses your location to suggest the right experience bucket.",
+        "NSPhotoLibraryUsageDescription": "Zoi lets you add photos to your experiences.",
+        "NSCameraUsageDescription": "Zoi lets you take photos for your experiences."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FAF8F5"
+      },
+      "package": "com.zoi.app"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Zoi lets you add photos to your experiences.",
+          "cameraPermission": "Zoi lets you take photos for your experiences."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Zoi uses your contacts to find friends already on the app."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Zoi uses your location to suggest the right experience bucket."
+        }
+      ]
+    ],
+    "scheme": "zoi"
+  }
+}
