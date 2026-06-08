@@ -7,6 +7,7 @@ import { RouteProp } from '@react-navigation/native';
 import { LogStackParamList, Experience, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
+import { uploadExperiencePhotos } from '@/lib/storage';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -97,13 +98,23 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Upload photos to Storage first; save without them if upload fails.
+    let photoUrls: string[] = [];
+    try {
+      photoUrls = await uploadExperiencePhotos(user.id, draft.photos);
+    } catch {
+      if (draft.photos.length > 0) {
+        Alert.alert('Photo upload failed', 'Saving your experience without photos.');
+      }
+    }
+
     const { error } = await supabase.from('experiences').insert({
       user_id: user.id,
       sentiment: s,
       trip_id: draft.trip_id,
       location: draft.location,
       tags: draft.tags,
-      photos: draft.photos,
+      photos: photoUrls,
       quick_take: draft.quick_take,
       rank_key: rankKey,
     });

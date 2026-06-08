@@ -11,7 +11,8 @@ getaways. The ranking IS the content. Solo project, built to move fast.
 - **Navigation:** React Navigation (native-stack + bottom-tabs)
 - **Location:** Google Places API (New), proxied through a Supabase Edge Function so the
   key stays server-side. Client calls `src/lib/places.ts`; never the Google API directly.
-- **Images:** expo-image-picker → Supabase Storage (upload not yet wired)
+- **Images:** expo-image-picker → uploaded to Supabase Storage (`experience-photos` bucket)
+  at log-save time via `src/lib/storage.ts` (expo-file-system `File.bytes()`)
 
 ## Running
 
@@ -41,6 +42,7 @@ src/
     places.ts               # client wrapper for the `places` Edge Function
     follows.ts              # search users, follow/unfollow, getFollowingIds
     feed.ts                 # getFeed() — followed users' experiences + author rank position
+    storage.ts              # uploadExperiencePhotos() — local URIs -> Storage public URLs
   components/
     LocationSearch.tsx      # debounced Places autocomplete + select (used in AddExperience)
     ExperienceCard.tsx      # feed card: author, photo, place, sentiment, rank, tags, quick take

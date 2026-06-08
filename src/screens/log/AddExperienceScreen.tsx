@@ -78,7 +78,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
     navigation.navigate('RankExperience', {
       draft: {
         location,
-        // TODO: upload photos to Supabase Storage and store public URLs instead of local URIs
+        // Local URIs here; uploaded to Storage at save time in RankExperienceScreen
         photos,
         quick_take: quickTake.trim(),
         tags,
