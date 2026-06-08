@@ -89,7 +89,7 @@ create trigger trips_updated_at
 create table public.experiences (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.users(id) on delete cascade not null,
-  -- Sentiment tier drives ranking scope and score range
+  -- Coarse gut reaction; seeds the starting third of the overall ranked list
   sentiment text not null check (sentiment in ('loved', 'liked', 'fine')),
   -- Optional membership in a trip container
   trip_id uuid references public.trips(id) on delete set null,
@@ -98,7 +98,7 @@ create table public.experiences (
   tags text[] not null default '{}',
   photos text[] not null default '{}',
   quick_take text not null default '',
-  -- Fractional index string for ordering within (user_id, sentiment)
+  -- Fractional index string ordering the single overall list per user
   rank_key text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -119,9 +119,9 @@ create policy "Users can read experiences from people they follow"
 create policy "Users can manage their own experiences"
   on public.experiences for all using (auth.uid() = user_id);
 
--- Index for fast ranked list lookup (ranking is scoped per sentiment tier)
-create index experiences_user_sentiment_rank
-  on public.experiences (user_id, sentiment, rank_key);
+-- Index for fast ranked list lookup (one overall list per user)
+create index experiences_user_rank
+  on public.experiences (user_id, rank_key);
 
 -- Index for fetching a trip's experiences
 create index experiences_trip

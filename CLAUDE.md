@@ -55,7 +55,7 @@ src/
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
     feed/FeedScreen.tsx     # stub (friends' experiences — not wired yet)
-    list/MyListScreen.tsx   # your experiences ranked per sentiment tier w/ scores (wired)
+    list/MyListScreen.tsx   # your single overall ranked list w/ derived scores (wired)
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
     profile/ProfileScreen.tsx  # sign out; account view (ranked lists now live in My List)
     search/SearchScreen.tsx # stub, NOT mounted in tabs (kept for later repurpose)
@@ -83,11 +83,13 @@ Two entity types:
   itself; can be empty; shows a derived average score.
 
 ### Ranking & rating (the differentiator)
-When logging an experience: pick a **sentiment tier** — Loved / Liked / Fine — then a
-**binary comparison** ("which did you enjoy more?") places it *within that tier* using
-fractional indexing (`src/lib/ranking.ts`). Ranking is scoped per `(user_id, sentiment)`.
-Score (0–10) is **derived** from tier + position (`scoreFromRank`): Loved 8.5–10,
-Liked 6.0–8.4, Fine 0–5.9. No manual star rating — position is the rating.
+There is ONE overall ranked list per user. When logging: pick a **sentiment** — Loved /
+Liked / Fine — which only seeds the **starting third** of the list (loved=top, liked=middle,
+fine=lower; `thirdBounds`). Then a **binary comparison** ("which did you enjoy more?")
+refines the exact position within that third, using fractional indexing (`src/lib/ranking.ts`).
+`rank_key` orders the whole list (scoped per `user_id`). Score (0–10) is **derived** from
+overall position (`scoreFromOverallRank`): top of list = 10.0, bottom = 0.0. No manual star
+rating — position is the rating. Sentiment is kept as metadata (shown as an emoji in lists).
 
 ### Log flow (Log tab → LogNavigator)
 `LogHome` (two options) → either:

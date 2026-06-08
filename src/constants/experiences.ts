@@ -1,7 +1,8 @@
 import { Sentiment, Tag } from '@/types';
 
-// Sentiment tiers — ranking is scoped within a tier, and the tier
-// determines which slice of the 0–10 score range an experience can land in.
+// There is ONE overall ranked list per user. Sentiment is just the coarse starting
+// placement — it seeds which third of the list a new experience drops into, then binary
+// comparison refines the exact position. loved=top, liked=middle, fine=lower third.
 export const SENTIMENTS: Sentiment[] = ['loved', 'liked', 'fine'];
 
 export const SENTIMENT_LABELS: Record<Sentiment, string> = {
@@ -16,27 +17,31 @@ export const SENTIMENT_EMOJI: Record<Sentiment, string> = {
   fine: '😐',
 };
 
-// Score range each tier maps onto (inclusive). Position within the tier's
-// ranked list determines where in this range the experience lands.
-export const SENTIMENT_RANGE: Record<Sentiment, { min: number; max: number }> = {
-  loved: { min: 8.5, max: 10.0 },
-  liked: { min: 6.0, max: 8.4 },
-  fine: { min: 0.0, max: 5.9 },
-};
+/**
+ * Initial insert window [lo, hi] (index bounds) into the existing ranked list of size n,
+ * based on the chosen sentiment. The new item is placed within this window by binary
+ * comparison. loved → top third, liked → middle third, fine → lower third.
+ */
+export function thirdBounds(sentiment: Sentiment, n: number): [number, number] {
+  const t1 = Math.round(n / 3);
+  const t2 = Math.round((2 * n) / 3);
+  switch (sentiment) {
+    case 'loved': return [0, t1];
+    case 'liked': return [t1, t2];
+    case 'fine': return [t2, n];
+  }
+}
 
 /**
- * Derive a 0–10 score from an experience's position within its sentiment tier.
- * Rank 0 = top of the tier (best), so it maps to the high end of the range.
+ * Derive a 0–10 score from an experience's position in the OVERALL ranked list.
+ * Top of the list (index 0) = 10.0, bottom = 0.0.
  *
- * @param rankIndex  0-based position in the tier's ranked list (0 = best)
- * @param tierCount  total number of experiences in that tier
+ * @param index  0-based position in the full ranked list (0 = best)
+ * @param total  total number of experiences in the list
  */
-export function scoreFromRank(sentiment: Sentiment, rankIndex: number, tierCount: number): number {
-  const { min, max } = SENTIMENT_RANGE[sentiment];
-  if (tierCount <= 1) return max;
-  // Top of list (rankIndex 0) → max; bottom → min
-  const t = rankIndex / (tierCount - 1);
-  const score = max - t * (max - min);
+export function scoreFromOverallRank(index: number, total: number): number {
+  if (total <= 1) return 10.0;
+  const score = 10 - (index / (total - 1)) * 10;
   return Math.round(score * 10) / 10;
 }
 

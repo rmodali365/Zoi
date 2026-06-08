@@ -5,7 +5,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { LogStackParamList, Experience, Sentiment } from '@/types';
-import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI } from '@/constants/experiences';
+import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds, scoreFromOverallRank } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -35,24 +35,33 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       return;
     }
 
+    // Load the FULL ranked list — ranking is one overall list per user now.
     const { data } = await supabase
       .from('experiences')
       .select('*')
       .eq('user_id', user.id)
-      .eq('sentiment', s)
       .order('rank_key', { ascending: true });
 
     const existing = (data ?? []) as Experience[];
-    setPool(existing);
 
     if (existing.length === 0) {
-      // First in this tier — auto #1
-      await save(s, initialRankKey(), true);
+      // Very first experience — auto #1.
+      await save(s, initialRankKey(), 0, 1);
       return;
     }
 
-    setLo(0);
-    setHi(existing.length);
+    // Seed the comparison window to the third this sentiment maps to.
+    const [loBound, hiBound] = thirdBounds(s, existing.length);
+
+    if (loBound >= hiBound) {
+      // No room to compare (tiny list) — drop straight into the boundary slot.
+      await save(s, rankKeyForPositionIn(existing, loBound), loBound, existing.length + 1);
+      return;
+    }
+
+    setPool(existing);
+    setLo(loBound);
+    setHi(hiBound);
     setPhase('comparing');
   }
 
@@ -72,19 +81,19 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
   }
 
-  function rankKeyForPosition(pos: number): string {
-    if (pos === 0) return keyBefore(pool[0].rank_key);
-    if (pos >= pool.length) return keyAfter(pool[pool.length - 1].rank_key);
-    return keyBetween(pool[pos - 1].rank_key, pool[pos].rank_key);
+  function rankKeyForPositionIn(list: Experience[], pos: number): string {
+    if (pos <= 0) return keyBefore(list[0].rank_key);
+    if (pos >= list.length) return keyAfter(list[list.length - 1].rank_key);
+    return keyBetween(list[pos - 1].rank_key, list[pos].rank_key);
   }
 
   async function finalize(pos: number) {
     if (!sentiment) return;
     setPhase('saving');
-    await save(sentiment, rankKeyForPosition(pos), false);
+    await save(sentiment, rankKeyForPositionIn(pool, pos), pos, pool.length + 1);
   }
 
-  async function save(s: Sentiment, rankKey: string, isFirst: boolean) {
+  async function save(s: Sentiment, rankKey: string, pos: number, total: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -106,11 +115,13 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
 
     const place = draft.location.name;
+    const score = scoreFromOverallRank(pos, total);
+    const isFirst = total === 1;
     Alert.alert(
       isFirst ? '🎉 First one!' : 'Ranked!',
       isFirst
-        ? `${place} is your #1 ${SENTIMENT_LABELS[s].toLowerCase()} experience. You started your list!`
-        : `${place} is in.`,
+        ? `${place} is your #1. You started your list!`
+        : `${place} landed at #${pos + 1} of ${total} · ${score.toFixed(1)}`,
       [{ text: 'Done', onPress: () => navigation.popToTop() }],
     );
   }
