@@ -109,3 +109,8 @@ export type LogStackParamList = {
   RankExperience: { draft: ExperienceDraft };
   StartTrip: undefined;
 };
+
+export type FeedStackParamList = {
+  FeedHome: undefined;
+  FindPeople: undefined;
+};

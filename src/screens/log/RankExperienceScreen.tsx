@@ -5,7 +5,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { LogStackParamList, Experience, Sentiment } from '@/types';
-import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds, scoreFromOverallRank } from '@/constants/experiences';
+import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -115,13 +115,12 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
 
     const place = draft.location.name;
-    const score = scoreFromOverallRank(pos, total);
     const isFirst = total === 1;
     Alert.alert(
       isFirst ? '🎉 First one!' : 'Ranked!',
       isFirst
         ? `${place} is your #1. You started your list!`
-        : `${place} landed at #${pos + 1} of ${total} · ${score.toFixed(1)}`,
+        : `${place} landed at #${pos + 1} of ${total}`,
       [{ text: 'Done', onPress: () => navigation.popToTop() }],
     );
   }

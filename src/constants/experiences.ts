@@ -36,6 +36,9 @@ export function thirdBounds(sentiment: Sentiment, n: number): [number, number] {
  * Derive a 0–10 score from an experience's position in the OVERALL ranked list.
  * Top of the list (index 0) = 10.0, bottom = 0.0.
  *
+ * NOTE: not currently surfaced in the UI — we show rankings (positions) only for now.
+ * Kept for when numerical scores are reintroduced.
+ *
  * @param index  0-based position in the full ranked list (0 = best)
  * @param total  total number of experiences in the list
  */

@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { AppTabParamList } from '@/types';
-import { FeedScreen } from '@/screens/feed/FeedScreen';
+import { FeedNavigator } from '@/navigation/FeedNavigator';
 import { MyListScreen } from '@/screens/list/MyListScreen';
 import { LogNavigator } from '@/navigation/LogNavigator';
 import { ProfileScreen } from '@/screens/profile/ProfileScreen';
@@ -44,7 +44,7 @@ export function AppNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} options={{ tabBarLabel: 'Feed' }} />
+      <Tab.Screen name="Feed" component={FeedNavigator} options={{ tabBarLabel: 'Feed' }} />
       <Tab.Screen name="List" component={MyListScreen} options={{ tabBarLabel: 'My List' }} />
       <Tab.Screen name="Log" component={LogNavigator} options={{ tabBarLabel: 'Log' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />

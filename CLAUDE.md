@@ -39,8 +39,11 @@ src/
     supabase.ts             # Supabase client (SecureStore session persistence)
     ranking.ts              # fractional-index rank_key helpers (bucket-agnostic)
     places.ts               # client wrapper for the `places` Edge Function
+    follows.ts              # search users, follow/unfollow, getFollowingIds
+    feed.ts                 # getFeed() — followed users' experiences + author rank position
   components/
     LocationSearch.tsx      # debounced Places autocomplete + select (used in AddExperience)
+    ExperienceCard.tsx      # feed card: author, photo, place, sentiment, rank, tags, quick take
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
     experiences.ts          # SENTIMENTS, score-from-rank, flat TAGS + labels
@@ -51,10 +54,12 @@ src/
     index.tsx               # RootNavigator: session+profile -> App, else Auth
     AuthNavigator.tsx       # Welcome -> PhoneAuth -> VerifyOtp -> SetupProfile
     AppNavigator.tsx        # bottom tabs (w/ Ionicons): Feed / My List / Log / Profile
+    FeedNavigator.tsx       # Feed tab stack: FeedHome + FindPeople (modal)
     LogNavigator.tsx        # Log tab stack (see Log flow below)
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
-    feed/FeedScreen.tsx     # stub (friends' experiences — not wired yet)
+    feed/FeedScreen.tsx     # followed users' experiences (wired); pull-to-refresh + Find friends
+    feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow
     list/MyListScreen.tsx   # your single overall ranked list w/ derived scores (wired)
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
     profile/ProfileScreen.tsx  # sign out; account view (ranked lists now live in My List)
@@ -87,9 +92,9 @@ There is ONE overall ranked list per user. When logging: pick a **sentiment** �
 Liked / Fine — which only seeds the **starting third** of the list (loved=top, liked=middle,
 fine=lower; `thirdBounds`). Then a **binary comparison** ("which did you enjoy more?")
 refines the exact position within that third, using fractional indexing (`src/lib/ranking.ts`).
-`rank_key` orders the whole list (scoped per `user_id`). Score (0–10) is **derived** from
-overall position (`scoreFromOverallRank`): top of list = 10.0, bottom = 0.0. No manual star
-rating — position is the rating. Sentiment is kept as metadata (shown as an emoji in lists).
+`rank_key` orders the whole list (scoped per `user_id`). **We surface rankings (positions)
+only — no numerical score for now.** A `scoreFromOverallRank` helper exists for when scores
+are reintroduced, but nothing displays it. Sentiment is kept as metadata (emoji in lists).
 
 ### Log flow (Log tab → LogNavigator)
 `LogHome` (two options) → either:
@@ -123,6 +128,11 @@ change — it's a generated snapshot. To change the schema:
    `[]` = success for DDL.
 3. **Verify** it applied (query `information_schema.columns`).
 4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
+
+### PostgREST embed gotcha
+`experiences` ↔ `users` has TWO relationships (author FK + many-to-many via `saves`), so an
+embed must name the FK explicitly: `user:users!experiences_user_id_fkey(...)`. A bare
+`users(...)` errors with PGRST201 (ambiguous). `trips` embed is unambiguous.
 
 ## Edge Functions
 

@@ -4,15 +4,13 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Experience } from '@/types';
-import { SENTIMENT_EMOJI, scoreFromOverallRank, TAG_LABELS } from '@/constants/experiences';
+import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
-type RankedItem = Experience & { score: number };
-
 export function MyListScreen() {
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<RankedItem[]>([]);
+  const [items, setItems] = useState<Experience[]>([]);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -26,8 +24,7 @@ export function MyListScreen() {
       .eq('user_id', user.id)
       .order('rank_key', { ascending: true });
 
-    const all = (data ?? []) as Experience[];
-    setItems(all.map((e, i) => ({ ...e, score: scoreFromOverallRank(i, all.length) })));
+    setItems((data ?? []) as Experience[]);
     setLoading(false);
   }, []);
 
@@ -64,9 +61,8 @@ export function MyListScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {items.map((item, i) => (
             <View key={item.id} style={styles.row}>
-              <Text style={styles.rank}>{i + 1}</Text>
-              <View style={styles.scoreBadge}>
-                <Text style={styles.scoreText}>{item.score.toFixed(1)}</Text>
+              <View style={styles.rankBadge}>
+                <Text style={styles.rankText}>{i + 1}</Text>
               </View>
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -112,13 +108,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     gap: SPACING.sm,
   },
-  rank: { fontSize: 14, ...FONT.medium, color: COLORS.textMuted, width: 24, textAlign: 'center' },
-  scoreBadge: {
-    width: 40, height: 40, borderRadius: RADIUS.sm,
+  rankBadge: {
+    width: 36, height: 36, borderRadius: RADIUS.full,
     backgroundColor: COLORS.accentLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  scoreText: { fontSize: 15, ...FONT.bold, color: COLORS.accent },
+  rankText: { fontSize: 16, ...FONT.bold, color: COLORS.accent },
   info: { flex: 1 },
   name: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
   place: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
