@@ -114,3 +114,8 @@ export type FeedStackParamList = {
   FeedHome: undefined;
   FindPeople: undefined;
 };
+
+export type ProfileStackParamList = {
+  ProfileHome: undefined;
+  TripDetail: { tripId: string };
+};

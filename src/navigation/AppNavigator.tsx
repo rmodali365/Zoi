@@ -5,7 +5,7 @@ import { AppTabParamList } from '@/types';
 import { FeedNavigator } from '@/navigation/FeedNavigator';
 import { MyListScreen } from '@/screens/list/MyListScreen';
 import { LogNavigator } from '@/navigation/LogNavigator';
-import { ProfileScreen } from '@/screens/profile/ProfileScreen';
+import { ProfileNavigator } from '@/navigation/ProfileNavigator';
 import { COLORS } from '@/constants/theme';
 
 const Tab = createBottomTabNavigator<AppTabParamList>();
@@ -47,7 +47,7 @@ export function AppNavigator() {
       <Tab.Screen name="Feed" component={FeedNavigator} options={{ tabBarLabel: 'Feed' }} />
       <Tab.Screen name="List" component={MyListScreen} options={{ tabBarLabel: 'My List' }} />
       <Tab.Screen name="Log" component={LogNavigator} options={{ tabBarLabel: 'Log' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
+      <Tab.Screen name="Profile" component={ProfileNavigator} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );
 }

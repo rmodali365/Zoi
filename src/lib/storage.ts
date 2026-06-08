@@ -2,6 +2,7 @@ import { File } from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'experience-photos';
+const AVATAR_BUCKET = 'avatars';
 
 function contentTypeFor(ext: string): string {
   switch (ext) {
@@ -40,4 +41,22 @@ export async function uploadExperiencePhotos(userId: string, localUris: string[]
   }
 
   return urls;
+}
+
+/**
+ * Uploads a profile picture to the avatars bucket under the user's folder and returns its
+ * public URL.
+ */
+export async function uploadAvatar(userId: string, localUri: string): Promise<string> {
+  const bytes = await new File(localUri).bytes();
+  const ext = (localUri.split('.').pop() ?? 'jpg').split('?')[0].toLowerCase();
+  const path = `${userId}/avatar-${Date.now()}.${ext}`;
+
+  const { error } = await supabase.storage.from(AVATAR_BUCKET).upload(path, bytes, {
+    contentType: contentTypeFor(ext),
+    upsert: false,
+  });
+  if (error) throw error;
+
+  return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
 }

@@ -11,8 +11,9 @@ getaways. The ranking IS the content. Solo project, built to move fast.
 - **Navigation:** React Navigation (native-stack + bottom-tabs)
 - **Location:** Google Places API (New), proxied through a Supabase Edge Function so the
   key stays server-side. Client calls `src/lib/places.ts`; never the Google API directly.
-- **Images:** expo-image-picker → uploaded to Supabase Storage (`experience-photos` bucket)
-  at log-save time via `src/lib/storage.ts` (expo-file-system `File.bytes()`)
+- **Images:** expo-image-picker → uploaded to Supabase Storage via `src/lib/storage.ts`
+  (expo-file-system `File.bytes()`). Buckets: `experience-photos` (at log-save) and `avatars`
+  (profile pic). Both public, per-user folder RLS (`<uid>/...`).
 
 ## Running
 
@@ -42,10 +43,12 @@ src/
     places.ts               # client wrapper for the `places` Edge Function
     follows.ts              # search users, follow/unfollow, getFollowingIds
     feed.ts                 # getFeed() — followed users' experiences + author rank position
-    storage.ts              # uploadExperiencePhotos() — local URIs -> Storage public URLs
+    follows.ts              # ...also getSuggestedUsers() (who-to-follow)
+    storage.ts              # uploadExperiencePhotos() + uploadAvatar() — local URIs -> public URLs
   components/
     LocationSearch.tsx      # debounced Places autocomplete + select (used in AddExperience)
     ExperienceCard.tsx      # feed card: author, photo, place, sentiment, rank, tags, quick take
+    SuggestedUsers.tsx      # horizontal square user cards w/ Follow (profile "Suggested for you")
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
     experiences.ts          # SENTIMENTS, score-from-rank, flat TAGS + labels
@@ -58,13 +61,15 @@ src/
     AppNavigator.tsx        # bottom tabs (w/ Ionicons): Feed / My List / Log / Profile
     FeedNavigator.tsx       # Feed tab stack: FeedHome + FindPeople (modal)
     LogNavigator.tsx        # Log tab stack (see Log flow below)
+    ProfileNavigator.tsx    # Profile tab stack: ProfileHome + TripDetail
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
     feed/FeedScreen.tsx     # followed users' experiences (wired); pull-to-refresh + Find friends
     feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow
     list/MyListScreen.tsx   # your single overall ranked list w/ derived scores (wired)
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
-    profile/ProfileScreen.tsx  # sign out; account view (ranked lists now live in My List)
+    profile/ProfileScreen.tsx  # name/@handle, avatar upload, Suggested-for-you, Trips strip, exp list, sign out
+    profile/TripDetailScreen.tsx  # a trip's experiences (detailed), reached from the Trips strip
     search/SearchScreen.tsx # stub, NOT mounted in tabs (kept for later repurpose)
 supabase/
   migrations/               # SOURCE OF TRUTH for the DB (see DB section)

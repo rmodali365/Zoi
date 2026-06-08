@@ -35,6 +35,24 @@ export async function getFollowingIds(): Promise<Set<string>> {
   return new Set((data ?? []).map((r: { following_id: string }) => r.following_id));
 }
 
+// Simple "who to follow" suggestions: users the current user doesn't already follow.
+export async function getSuggestedUsers(limit = 12): Promise<UserResult[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const following = await getFollowingIds();
+
+  const { data } = await supabase
+    .from('users')
+    .select('id, name, handle, avatar_url')
+    .neq('id', user.id)
+    .limit(50);
+
+  return ((data ?? []) as UserResult[])
+    .filter((u) => !following.has(u.id))
+    .slice(0, limit);
+}
+
 export async function followUser(targetId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
