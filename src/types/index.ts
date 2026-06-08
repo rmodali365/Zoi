@@ -27,9 +27,10 @@ export interface Location {
   lng: number;
   name: string;
   place_id: string;
-  city?: string;
-  region?: string;
-  country?: string;
+  city?: string | null;
+  region?: string | null;
+  country?: string | null;
+  formattedAddress?: string | null;
 }
 
 export interface Trip {

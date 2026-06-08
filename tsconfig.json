@@ -10,5 +10,7 @@
     "paths": {
       "@/*": ["src/*"]
     }
-  }
+  },
+  "include": ["App.tsx", "index.js", "src"],
+  "exclude": ["node_modules", "supabase"]
 }

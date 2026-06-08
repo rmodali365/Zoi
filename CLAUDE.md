@@ -9,7 +9,8 @@ getaways. The ranking IS the content. Solo project, built to move fast.
 - **Frontend:** React Native + Expo (SDK 54, RN 0.81), TypeScript (strict), iOS-first
 - **Backend:** Supabase — auth (phone OTP), Postgres (RLS), storage
 - **Navigation:** React Navigation (native-stack + bottom-tabs)
-- **Location:** Google Places API (not yet integrated — key blank in `.env`)
+- **Location:** Google Places API (New), proxied through a Supabase Edge Function so the
+  key stays server-side. Client calls `src/lib/places.ts`; never the Google API directly.
 - **Images:** expo-image-picker → Supabase Storage (upload not yet wired)
 
 ## Running
@@ -37,6 +38,9 @@ src/
   lib/
     supabase.ts             # Supabase client (SecureStore session persistence)
     ranking.ts              # fractional-index rank_key helpers (bucket-agnostic)
+    places.ts               # client wrapper for the `places` Edge Function
+  components/
+    LocationSearch.tsx      # debounced Places autocomplete + select (used in AddExperience)
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
     experiences.ts          # SENTIMENTS, score-from-rank, flat TAGS + labels
@@ -58,6 +62,9 @@ supabase/
   migrations/               # SOURCE OF TRUTH for the DB (see DB section)
   schema.sql                # generated snapshot, read-only
   README.md                 # DB workflow
+  config.toml               # project ref + function config (verify_jwt)
+  functions/
+    places/index.ts         # Deno Edge Function: Google Places proxy (key server-side)
 ```
 
 ## Core concepts
@@ -114,6 +121,24 @@ change — it's a generated snapshot. To change the schema:
 3. **Verify** it applied (query `information_schema.columns`).
 4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
 
+## Edge Functions
+
+Deno functions live in `supabase/functions/<name>/`. Deploy with the CLI (no Docker
+needed — it bundles via API). Auth the CLI with the access token from
+`.claude/settings.local.json`:
+
+```sh
+# set a secret (server-side env var for the function)
+SUPABASE_ACCESS_TOKEN=<token> supabase secrets set NAME=value --project-ref ckfpzzddogzdbjtxmahq
+# deploy
+SUPABASE_ACCESS_TOKEN=<token> supabase functions deploy <name> --project-ref ckfpzzddogzdbjtxmahq
+```
+
+`places` proxies Google Places (New). `verify_jwt = true`, so callers need a valid
+Supabase session — `supabase.functions.invoke('places', { body })` passes it automatically.
+The Google key is the `GOOGLE_PLACES_API_KEY` function secret, NOT a client env var.
+Functions are excluded from the app's `tsconfig` (they're Deno, not RN).
+
 ## Project config & secrets
 
 - **Supabase project ref:** `ckfpzzddogzdbjtxmahq`
@@ -126,6 +151,7 @@ change — it's a generated snapshot. To change the schema:
 
 ## Status / what's next
 
-Built: auth flow, the log + rank loop, trips, DB migration setup.
-Deferred TODOs (have inline markers): Google Places integration, photo upload to Supabase
-Storage (picker currently keeps local URIs), and wiring real data into Profile + Feed.
+Built: auth flow, the log + rank loop, trips, DB migration setup, Google Places (via Edge
+Function proxy) wired into AddExperience.
+Deferred TODOs (have inline markers): photo upload to Supabase Storage (picker currently
+keeps local URIs), and wiring real data into Profile + Feed.

@@ -6,8 +6,9 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { LogStackParamList, Tag, Trip } from '@/types';
+import { LogStackParamList, Location, Tag, Trip } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
+import { LocationSearch } from '@/components/LocationSearch';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -22,7 +23,7 @@ const MAX_TAGS = 3;
 export function AddExperienceScreen({ navigation, route }: Props) {
   const presetTripId = route.params?.tripId ?? null;
 
-  const [locationName, setLocationName] = useState('');
+  const [location, setLocation] = useState<Location | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const [quickTake, setQuickTake] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
@@ -70,14 +71,13 @@ export function AddExperienceScreen({ navigation, route }: Props) {
   }
 
   function handleNext() {
-    if (!locationName.trim()) {
-      Alert.alert('Add a place', 'Where did this happen?');
+    if (!location) {
+      Alert.alert('Add a place', 'Search and select where this happened.');
       return;
     }
     navigation.navigate('RankExperience', {
       draft: {
-        // TODO: replace with Google Places result (lat/lng/place_id) once integrated
-        location: { name: locationName.trim(), lat: 0, lng: 0, place_id: '' },
+        location,
         // TODO: upload photos to Supabase Storage and store public URLs instead of local URIs
         photos,
         quick_take: quickTake.trim(),
@@ -103,14 +103,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         {/* Location */}
         <View style={styles.field}>
           <Text style={styles.label}>Place</Text>
-          <TextInput
-            style={styles.input}
-            value={locationName}
-            onChangeText={setLocationName}
-            placeholder="Where were you?"
-            placeholderTextColor={COLORS.textMuted}
-            autoCorrect={false}
-          />
+          <LocationSearch value={location} onChange={setLocation} />
         </View>
 
         {/* Photos */}
