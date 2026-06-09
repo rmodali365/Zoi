@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ProfileStackParamList, User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
+import { shareProfile } from '@/lib/share';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -119,9 +120,20 @@ export function ProfileScreen({ navigation }: Props) {
             <Text style={styles.handle}>@{profile?.handle ?? 'handle'}</Text>
           </View>
 
-          <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
-            <Text style={styles.signOut}>Sign out</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {!!profile && (
+              <TouchableOpacity
+                onPress={() => shareProfile(profile.id, profile.handle)}
+                activeOpacity={0.7}
+                hitSlop={8}
+              >
+                <Ionicons name="share-outline" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
+              <Text style={styles.signOut}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Who to follow */}
@@ -215,6 +227,7 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
   sectionTitle: {
     fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
