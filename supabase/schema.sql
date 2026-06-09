@@ -89,8 +89,13 @@ create table public.experiences (
   sentiment text not null check (sentiment in ('loved', 'liked', 'fine')),
   -- Optional membership in a trip container
   trip_id uuid references public.trips(id) on delete set null,
-  -- Location stored as structured JSON
-  location jsonb not null,
+  -- Short display headline ("SoMa bar crawl"); backfilled from location name
+  title text,
+  -- One or more locations for this outing (array of the Location shape)
+  locations jsonb not null default '[]'::jsonb,
+  -- Denormalized representative location (= locations[0]); nullable (see migration
+  -- 20260609000000_multi_location). Kept for older builds / map pin.
+  location jsonb,
   tags text[] not null default '{}',
   photos text[] not null default '{}',
   quick_take text not null default '',

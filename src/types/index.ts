@@ -54,6 +54,12 @@ export interface Experience {
   sentiment: Sentiment;
   // Optional membership in a trip container
   trip_id: string | null;
+  // Short display headline ("SoMa bar crawl"); the primary label shown everywhere.
+  title: string;
+  // One or more locations for this outing.
+  locations: Location[];
+  // Denormalized representative location (= locations[0]); kept for the map pin and
+  // older data. May be absent on very old rows.
   location: Location;
   tags: Tag[];
   photos: string[];
@@ -96,7 +102,8 @@ export type AppTabParamList = {
 
 // Draft passed from AddExperience into the ranking step before insert
 export type ExperienceDraft = {
-  location: Location;
+  title: string;
+  locations: Location[];
   tags: Tag[];
   photos: string[];
   quick_take: string;

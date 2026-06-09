@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ProfileStackParamList } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
+import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { getMyProfile, getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { shareProfile } from '@/lib/share';
@@ -204,12 +205,10 @@ export function ProfileScreen({ navigation }: Props) {
               <Text style={styles.rank}>{i + 1}</Text>
               <View style={styles.rowInfo}>
                 <Text style={styles.rowName} numberOfLines={1}>
-                  {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
+                  {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
                 </Text>
-                {!!(item.location.city || item.location.region) && (
-                  <Text style={styles.rowPlace} numberOfLines={1}>
-                    {[item.location.city, item.location.region].filter(Boolean).join(', ')}
-                  </Text>
+                {!!localityLabel(item) && (
+                  <Text style={styles.rowPlace} numberOfLines={1}>{localityLabel(item)}</Text>
                 )}
               </View>
             </View>

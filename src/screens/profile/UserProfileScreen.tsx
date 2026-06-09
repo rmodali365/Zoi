@@ -7,6 +7,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { getUserProfile } from '@/lib/users';
+import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -110,12 +111,10 @@ export function UserProfileScreen() {
               <Text style={styles.rank}>{i + 1}</Text>
               <View style={styles.rowInfo}>
                 <Text style={styles.rowName} numberOfLines={1}>
-                  {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
+                  {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
                 </Text>
-                {!!(item.location.city || item.location.region) && (
-                  <Text style={styles.rowPlace} numberOfLines={1}>
-                    {[item.location.city, item.location.region].filter(Boolean).join(', ')}
-                  </Text>
+                {!!localityLabel(item) && (
+                  <Text style={styles.rowPlace} numberOfLines={1}>{localityLabel(item)}</Text>
                 )}
               </View>
             </View>

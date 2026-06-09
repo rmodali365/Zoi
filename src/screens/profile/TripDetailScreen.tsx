@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ProfileStackParamList, Trip, Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
+import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -69,12 +70,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 )}
                 <View style={styles.cardBody}>
                   <Text style={styles.name}>
-                    {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
+                    {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
                   </Text>
-                  {!!(item.location.city || item.location.region) && (
-                    <Text style={styles.place}>
-                      {[item.location.city, item.location.region].filter(Boolean).join(', ')}
-                    </Text>
+                  {!!localityLabel(item) && (
+                    <Text style={styles.place}>{localityLabel(item)}</Text>
                   )}
                   {!!item.quick_take && <Text style={styles.quote}>“{item.quick_take}”</Text>}
                   {item.tags.length > 0 && (
