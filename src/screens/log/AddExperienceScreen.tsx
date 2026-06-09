@@ -79,6 +79,10 @@ export function AddExperienceScreen({ navigation, route }: Props) {
     setLocations((prev) => prev.filter((l) => l.place_id !== placeId));
   }
 
+  // When we arrived from "Start a trip → Add experience", the trip is fixed and
+  // authoritative — never let it drift to null. Otherwise use the picked trip.
+  const presetTrip = presetTripId ? trips.find((t) => t.id === presetTripId) : null;
+
   function handleNext() {
     if (locations.length === 0) {
       Alert.alert('Add a place', 'Add at least one location for this experience.');
@@ -93,7 +97,8 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         photos,
         quick_take: quickTake.trim(),
         tags,
-        trip_id: tripId,
+        // Preset trip wins; it can't be changed in the UI when coming from a trip.
+        trip_id: presetTripId ?? tripId,
       },
     });
   }
@@ -200,8 +205,16 @@ export function AddExperienceScreen({ navigation, route }: Props) {
           </View>
         </View>
 
-        {/* Add to trip */}
-        {trips.length > 0 && (
+        {/* Trip association */}
+        {presetTripId ? (
+          // Came from "Start a trip → Add experience": the trip is locked in and shown.
+          <View style={styles.field}>
+            <Text style={styles.label}>Trip</Text>
+            <View style={styles.tripBanner}>
+              <Text style={styles.tripBannerText}>🧳 Adding to {presetTrip?.title ?? 'your trip'}</Text>
+            </View>
+          </View>
+        ) : trips.length > 0 ? (
           <View style={styles.field}>
             <Text style={styles.label}>Add to a trip</Text>
             <View style={styles.chips}>
@@ -227,7 +240,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
               })}
             </View>
           </View>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -294,4 +307,11 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: COLORS.text, borderColor: COLORS.text },
   chipText: { fontSize: 14, ...FONT.medium, color: COLORS.text },
   chipTextSelected: { color: COLORS.background },
+  tripBanner: {
+    backgroundColor: COLORS.accentLight,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 12,
+  },
+  tripBannerText: { fontSize: 15, ...FONT.medium, color: COLORS.text },
 });

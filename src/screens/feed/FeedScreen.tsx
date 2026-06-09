@@ -1,14 +1,15 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FeedStackParamList } from '@/types';
-import { getFeed, FeedItem } from '@/lib/feed';
+import { getFeed } from '@/lib/feed';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
+import { qk } from '@/lib/queryKeys';
 import { ExperienceCard } from '@/components/ExperienceCard';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -17,54 +18,44 @@ type Props = {
 };
 
 export function FeedScreen({ navigation }: Props) {
-  const [items, setItems] = useState<FeedItem[]>([]);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
-  const load = useCallback(async () => {
-    try {
-      // Prefetch saved ids alongside the feed so cards render the right bookmark state.
-      const [feed, saved] = await Promise.all([getFeed(), getSavedIds()]);
-      setItems(feed);
-      setSavedIds(saved);
-    } catch {
-      setItems([]);
-    }
-  }, []);
+  const { data: items = [], isLoading, refetch, isRefetching } = useQuery({
+    queryKey: qk.feed,
+    queryFn: getFeed,
+  });
+  const { data: savedIds = new Set<string>() } = useQuery({
+    queryKey: qk.savedIds,
+    queryFn: getSavedIds,
+  });
 
-  // Optimistic bookmark toggle; reverts the local set on failure.
-  const toggleSave = useCallback(async (id: string) => {
-    const wasSaved = savedIds.has(id);
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      wasSaved ? next.delete(id) : next.add(id);
-      return next;
-    });
-    try {
-      if (wasSaved) await unsaveExperience(id);
-      else await saveExperience(id);
-    } catch {
-      setSavedIds((prev) => {
-        const next = new Set(prev);
-        wasSaved ? next.add(id) : next.delete(id);
+  // Optimistic bookmark toggle; reverts on error. Persisted to public.saves and the
+  // Want-to-do list (qk.saves) is invalidated so My List reflects the change.
+  const toggle = useMutation({
+    mutationFn: ({ id, wasSaved }: { id: string; wasSaved: boolean }) =>
+      wasSaved ? unsaveExperience(id) : saveExperience(id),
+    onMutate: async ({ id, wasSaved }) => {
+      await queryClient.cancelQueries({ queryKey: qk.savedIds });
+      const prev = queryClient.getQueryData<Set<string>>(qk.savedIds);
+      queryClient.setQueryData<Set<string>>(qk.savedIds, (old) => {
+        const next = new Set(old ?? []);
+        wasSaved ? next.delete(id) : next.add(id);
         return next;
       });
-    }
-  }, [savedIds]);
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(qk.savedIds, ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: qk.saves });
+    },
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      load().finally(() => setLoading(false));
-    }, [load]),
-  );
-
-  async function onRefresh() {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }
+  const onRefresh = useCallback(() => {
+    refetch();
+    queryClient.invalidateQueries({ queryKey: qk.savedIds });
+  }, [refetch, queryClient]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -75,7 +66,7 @@ export function FeedScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={COLORS.text} />
         </View>
@@ -88,12 +79,12 @@ export function FeedScreen({ navigation }: Props) {
               item={item}
               onPressAuthor={() => navigation.navigate('UserProfile', { userId: item.user_id })}
               saved={savedIds.has(item.id)}
-              onToggleSave={() => toggleSave(item.id)}
+              onToggleSave={() => toggle.mutate({ id: item.id, wasSaved: savedIds.has(item.id) })}
             />
           )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>Follow friends to see their rankings</Text>
