@@ -1,15 +1,18 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert,
-  Image, ActivityIndicator,
+  Image, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ProfileStackParamList, User, Experience, Trip } from '@/types';
+import { ProfileStackParamList } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
+import { getMyProfile, getMyExperiences, getMyTrips } from '@/lib/me';
+import { qk } from '@/lib/queryKeys';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
 import { uploadAvatar } from '@/lib/storage';
@@ -23,51 +26,43 @@ type Props = {
 const TRIP_CARD = 140;
 
 export function ProfileScreen({ navigation }: Props) {
-  const [profile, setProfile] = useState<User | null>(null);
-  const [experiences, setExperiences] = useState<Experience[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [counts, setCounts] = useState({ followers: 0, following: 0 });
-  const [myId, setMyId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const tripsRef = useRef<ScrollView>(null);
 
-  const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    setMyId(user.id);
-    const [{ data: prof }, { data: exps }, { data: tr }, followCounts] = await Promise.all([
-      supabase.from('users').select('*').eq('id', user.id).maybeSingle(),
-      supabase.from('experiences').select('*').eq('user_id', user.id).order('rank_key', { ascending: true }),
-      supabase.from('trips').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-      getFollowCounts(user.id),
-    ]);
-    setProfile((prof as User) ?? null);
-    setExperiences((exps ?? []) as Experience[]);
-    setTrips((tr ?? []) as Trip[]);
-    setCounts(followCounts);
-    setLoading(false);
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      load();
-    }, [load]),
-  );
-
-  // Reset scroll position (vertical + trips strip) when leaving, so returning
-  // to Profile always lands at the top.
+  // With caching the screen no longer remounts on focus, so scroll position would
+  // persist. Reset it to the top (and the trips strip to the start) on blur.
   useFocusEffect(
     useCallback(() => () => {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
       tripsRef.current?.scrollTo({ x: 0, animated: false });
     }, []),
   );
+
+  const { data: profile = null, isLoading: l1, refetch: rp, isRefetching: r1 } = useQuery({
+    queryKey: qk.myProfile,
+    queryFn: getMyProfile,
+  });
+  const { data: experiences = [], isLoading: l2, refetch: re, isRefetching: r2 } = useQuery({
+    queryKey: qk.myExperiences,
+    queryFn: getMyExperiences,
+  });
+  const { data: trips = [], isLoading: l3, refetch: rt, isRefetching: r3 } = useQuery({
+    queryKey: qk.myTrips,
+    queryFn: getMyTrips,
+  });
+
+  const myId = profile?.id ?? null;
+  const { data: counts = { followers: 0, following: 0 }, refetch: rc } = useQuery({
+    queryKey: ['follow-counts', myId],
+    queryFn: () => getFollowCounts(myId as string),
+    enabled: !!myId,
+  });
+
+  const loading = l1 && l2 && l3;
+  const refreshing = r1 || r2 || r3;
+  const onRefresh = useCallback(() => { rp(); re(); rt(); rc(); }, [rp, re, rt, rc]);
 
   async function handlePickAvatar() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -86,7 +81,7 @@ export function ProfileScreen({ navigation }: Props) {
       const url = await uploadAvatar(user.id, result.assets[0].uri);
       const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', user.id);
       if (error) throw error;
-      setProfile((p) => (p ? { ...p, avatar_url: url } : p));
+      queryClient.invalidateQueries({ queryKey: qk.myProfile });
     } catch {
       Alert.alert('Upload failed', 'Could not update your profile picture. Try again.');
     } finally {
@@ -116,7 +111,12 @@ export function ProfileScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8}>

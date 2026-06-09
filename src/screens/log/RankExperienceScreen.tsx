@@ -8,6 +8,8 @@ import { LogStackParamList, Experience, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { uploadExperiencePhotos } from '@/lib/storage';
+import { queryClient } from '@/lib/queryClient';
+import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -124,6 +126,10 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       setPhase('comparing');
       return;
     }
+
+    // New experience affects the user's My List + Profile (and trip averages).
+    queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+    queryClient.invalidateQueries({ queryKey: qk.myTrips });
 
     const place = draft.location.name;
     const isFirst = total === 1;

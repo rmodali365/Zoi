@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { getSuggestedUsers, followUser, UserResult } from '@/lib/follows';
+import { queryClient } from '@/lib/queryClient';
+import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 const CARD = 140;
@@ -24,6 +26,7 @@ export function SuggestedUsers({ onPressUser }: { onPressUser?: (id: string) => 
     setFollowed((prev) => new Set(prev).add(id));
     try {
       await followUser(id);
+      queryClient.invalidateQueries({ queryKey: qk.feed });
     } catch {
       setFollowed((prev) => {
         const next = new Set(prev);

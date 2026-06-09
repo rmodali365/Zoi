@@ -1,16 +1,18 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator,
-  TouchableOpacity,
+  TouchableOpacity, RefreshControl,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
-import { getSaves, unsaveExperience, SavedExperience } from '@/lib/saves';
+import { getSaves, unsaveExperience } from '@/lib/saves';
+import { getMyExperiences } from '@/lib/me';
+import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
 
 type ListTab = 'ranked' | 'wishlist';
 type RankedView = 'list' | 'map';
@@ -55,59 +57,57 @@ function regionForPins(pins: Experience[]): Region {
 }
 
 export function MyListScreen() {
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<Experience[]>([]);
-  const [saved, setSaved] = useState<SavedExperience[]>([]);
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<ListTab>('ranked');
   // List vs map only applies to the Ranked tab (your own "everywhere I've been").
   const [rankedView, setRankedView] = useState<RankedView>('list');
 
-  const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    const [{ data }, savedRows] = await Promise.all([
-      supabase
-        .from('experiences')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('rank_key', { ascending: true }),
-      getSaves().catch(() => [] as SavedExperience[]),
-    ]);
+  const { data: items = [], isLoading: loadingItems, refetch: refetchItems, isRefetching: refItems } = useQuery({
+    queryKey: qk.myExperiences,
+    queryFn: getMyExperiences,
+  });
+  const { data: saved = [], isLoading: loadingSaves, refetch: refetchSaves, isRefetching: refSaves } = useQuery({
+    queryKey: qk.saves,
+    queryFn: getSaves,
+  });
 
-    setItems((data ?? []) as Experience[]);
-    setSaved(savedRows);
-    setLoading(false);
-  }, []);
-
+  // Reset to the default view (ranked list) when leaving the tab. With caching there's
+  // no loading spinner on revisit, so reset on BLUR — the screen stays mounted, so it's
+  // already in the default state on return (no flash of the previous view).
   useFocusEffect(
-    useCallback(() => {
-      // Reset to the default view on every focus so returning to this tab always
-      // lands on the ranked list (not the map / want-to-do). Runs behind the
-      // loading spinner, so there's no flash of the previous view.
+    useCallback(() => () => {
       setTab('ranked');
       setRankedView('list');
-      setLoading(true);
-      load();
-    }, [load]),
+    }, []),
   );
 
   const pins = useMemo(() => items.filter(hasValidCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
-  async function handleUnsave(id: string) {
-    const prev = saved;
-    setSaved((s) => s.filter((e) => e.id !== id)); // optimistic
-    try {
-      await unsaveExperience(id);
-    } catch {
-      setSaved(prev); // revert on failure
-    }
-  }
+  // Optimistic unsave; reverts on error.
+  const unsave = useMutation({
+    mutationFn: (id: string) => unsaveExperience(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: qk.saves });
+      const prev = queryClient.getQueryData(qk.saves);
+      queryClient.setQueryData(qk.saves, (old: typeof saved | undefined) =>
+        (old ?? []).filter((e) => e.id !== id));
+      return { prev };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(qk.saves, ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: qk.savedIds });
+    },
+  });
 
-  if (loading) {
+  const onRefresh = useCallback(() => {
+    refetchItems();
+    refetchSaves();
+  }, [refetchItems, refetchSaves]);
+
+  if (loadingItems && loadingSaves) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
         <ActivityIndicator color={COLORS.text} />
@@ -115,6 +115,7 @@ export function MyListScreen() {
     );
   }
 
+  const refreshing = refItems || refSaves;
   const showMap = tab === 'ranked' && rankedView === 'map';
 
   return (
@@ -193,7 +194,11 @@ export function MyListScreen() {
             <Text style={styles.emptyBody}>Log your first experience to start ranking your taste.</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+          >
             {items.map((item, i) => (
               <View key={item.id} style={styles.row}>
                 <View style={styles.rankBadge}>
@@ -229,7 +234,11 @@ export function MyListScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+        >
           {saved.map((item) => (
             <View key={item.id} style={styles.row}>
               {item.photos.length > 0 ? (
@@ -257,7 +266,7 @@ export function MyListScreen() {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => handleUnsave(item.id)} hitSlop={8} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
                 <Ionicons name="bookmark" size={22} color={COLORS.accent} />
               </TouchableOpacity>
             </View>
