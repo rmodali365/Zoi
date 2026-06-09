@@ -86,6 +86,7 @@ export function FeedScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <ExperienceCard
               item={item}
+              onPressAuthor={() => navigation.navigate('UserProfile', { userId: item.user_id })}
               saved={savedIds.has(item.id)}
               onToggleSave={() => toggleSave(item.id)}
             />

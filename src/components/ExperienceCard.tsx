@@ -21,20 +21,31 @@ function timeAgo(iso: string): string {
 
 type Props = {
   item: FeedItem;
+  // When provided, tapping the author opens their profile.
+  onPressAuthor?: () => void;
   // When provided, renders a bookmark toggle reflecting `saved`.
   saved?: boolean;
   onToggleSave?: () => void;
 };
 
-export function ExperienceCard({ item, saved = false, onToggleSave }: Props) {
+export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSave }: Props) {
   const author = item.user;
   const place = [item.location.city, item.location.region].filter(Boolean).join(', ');
 
   return (
     <View style={styles.card}>
       {/* Author */}
-      <View style={styles.head}>
-        <View style={styles.avatar} />
+      <TouchableOpacity
+        style={styles.head}
+        onPress={onPressAuthor}
+        disabled={!onPressAuthor}
+        activeOpacity={0.7}
+      >
+        {author?.avatar_url ? (
+          <Image source={{ uri: author.avatar_url }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatar} />
+        )}
         <View style={styles.headInfo}>
           <Text style={styles.author} numberOfLines={1}>{author?.name ?? 'Someone'}</Text>
           <Text style={styles.handle} numberOfLines={1}>@{author?.handle ?? '…'}</Text>
@@ -49,7 +60,7 @@ export function ExperienceCard({ item, saved = false, onToggleSave }: Props) {
             />
           </TouchableOpacity>
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* Photo */}
       {item.photos.length > 0 && (

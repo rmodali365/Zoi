@@ -67,15 +67,11 @@ create table public.trips (
 
 alter table public.trips enable row level security;
 
-create policy "Users can read trips from people they follow"
+-- Public taste profiles: any authenticated user can read trips (see migration
+-- 20260608220000_public_profiles).
+create policy "Authenticated users can read all trips"
   on public.trips for select
-  using (
-    user_id = auth.uid()
-    or exists (
-      select 1 from public.follows
-      where follower_id = auth.uid() and following_id = trips.user_id
-    )
-  );
+  using (auth.uid() is not null);
 
 create policy "Users can manage their own trips"
   on public.trips for all using (auth.uid() = user_id);
@@ -106,15 +102,11 @@ create table public.experiences (
 
 alter table public.experiences enable row level security;
 
-create policy "Users can read experiences from people they follow"
+-- Public taste profiles: any authenticated user can read experiences (see migration
+-- 20260608220000_public_profiles).
+create policy "Authenticated users can read all experiences"
   on public.experiences for select
-  using (
-    user_id = auth.uid()
-    or exists (
-      select 1 from public.follows
-      where follower_id = auth.uid() and following_id = experiences.user_id
-    )
-  );
+  using (auth.uid() is not null);
 
 create policy "Users can manage their own experiences"
   on public.experiences for all using (auth.uid() = user_id);
