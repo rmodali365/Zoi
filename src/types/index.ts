@@ -122,4 +122,5 @@ export type ProfileStackParamList = {
   TripDetail: { tripId: string };
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
+  EditProfile: undefined;
 };

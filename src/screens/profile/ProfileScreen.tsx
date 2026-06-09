@@ -136,9 +136,18 @@ export function ProfileScreen({ navigation }: Props) {
             <Text style={styles.handle}>@{profile?.handle ?? 'handle'}</Text>
           </View>
 
-          <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
-            <Text style={styles.signOut}>Sign out</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditProfile')}
+              activeOpacity={0.7}
+              hitSlop={8}
+            >
+              <Ionicons name="create-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
+              <Text style={styles.signOut}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Follower / following counts */}
@@ -255,6 +264,7 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
   counts: {
     flexDirection: 'row',
