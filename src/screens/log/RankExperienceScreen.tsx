@@ -7,6 +7,7 @@ import { RouteProp } from '@react-navigation/native';
 import { LogStackParamList, Experience, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
+import { experienceTitle } from '@/lib/experienceDisplay';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
@@ -112,7 +113,10 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       user_id: user.id,
       sentiment: s,
       trip_id: draft.trip_id,
-      location: draft.location,
+      title: draft.title,
+      locations: draft.locations,
+      // Representative location (= locations[0]) for the map pin / legacy reads.
+      location: draft.locations[0] ?? null,
       tags: draft.tags,
       photos: photoUrls,
       quick_take: draft.quick_take,
@@ -125,7 +129,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       return;
     }
 
-    const place = draft.location.name;
+    const place = draft.title;
     const isFirst = total === 1;
     Alert.alert(
       isFirst ? '🎉 First one!' : 'Ranked!',
@@ -154,7 +158,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         </View>
         <View style={styles.content}>
           <Text style={styles.title}>How was it?</Text>
-          <Text style={styles.subtitle}>{draft.location.name}</Text>
+          <Text style={styles.subtitle}>{draft.title}</Text>
           <View style={styles.sentiments}>
             {SENTIMENTS.map((s) => (
               <TouchableOpacity
@@ -183,14 +187,14 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         <Text style={styles.title}>Which did you enjoy more?</Text>
         <View style={styles.compareRow}>
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(true)} activeOpacity={0.85}>
-            <Text style={styles.compareName}>{draft.location.name}</Text>
+            <Text style={styles.compareName}>{draft.title}</Text>
             <Text style={styles.compareTag}>New</Text>
           </TouchableOpacity>
 
           <Text style={styles.vs}>vs</Text>
 
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(false)} activeOpacity={0.85}>
-            <Text style={styles.compareName}>{opponent?.location?.name ?? 'Experience'}</Text>
+            <Text style={styles.compareName}>{opponent ? experienceTitle(opponent) : 'Experience'}</Text>
             <Text style={styles.compareTag}>Ranked</Text>
           </TouchableOpacity>
         </View>

@@ -23,7 +23,8 @@ const MAX_TAGS = 3;
 export function AddExperienceScreen({ navigation, route }: Props) {
   const presetTripId = route.params?.tripId ?? null;
 
-  const [location, setLocation] = useState<Location | null>(null);
+  const [title, setTitle] = useState('');
+  const [locations, setLocations] = useState<Location[]>([]);
   const [photos, setPhotos] = useState<string[]>([]);
   const [quickTake, setQuickTake] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
@@ -70,14 +71,24 @@ export function AddExperienceScreen({ navigation, route }: Props) {
     });
   }
 
+  function addLocation(loc: Location) {
+    setLocations((prev) => (prev.some((l) => l.place_id === loc.place_id) ? prev : [...prev, loc]));
+  }
+
+  function removeLocation(placeId: string) {
+    setLocations((prev) => prev.filter((l) => l.place_id !== placeId));
+  }
+
   function handleNext() {
-    if (!location) {
-      Alert.alert('Add a place', 'Search and select where this happened.');
+    if (locations.length === 0) {
+      Alert.alert('Add a place', 'Add at least one location for this experience.');
       return;
     }
     navigation.navigate('RankExperience', {
       draft: {
-        location,
+        // Title is optional; default to the first place's name.
+        title: title.trim() || locations[0].name,
+        locations,
         // Local URIs here; uploaded to Storage at save time in RankExperienceScreen
         photos,
         quick_take: quickTake.trim(),
@@ -100,10 +111,37 @@ export function AddExperienceScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Location */}
+        {/* Title */}
         <View style={styles.field}>
-          <Text style={styles.label}>Place</Text>
-          <LocationSearch value={location} onChange={setLocation} />
+          <Text style={styles.label}>Title</Text>
+          <TextInput
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Name this experience (e.g. SoMa bar crawl)"
+            placeholderTextColor={COLORS.textMuted}
+            maxLength={60}
+          />
+          <Text style={styles.hint}>Optional — defaults to the first place's name.</Text>
+        </View>
+
+        {/* Locations (one or more) */}
+        <View style={styles.field}>
+          <Text style={styles.label}>{locations.length === 1 ? 'Location' : 'Locations'} ({locations.length})</Text>
+          {locations.map((loc) => (
+            <View key={loc.place_id} style={styles.locRow}>
+              <View style={styles.locInfo}>
+                <Text style={styles.locName} numberOfLines={1}>{loc.name}</Text>
+                {!!loc.formattedAddress && (
+                  <Text style={styles.locAddr} numberOfLines={1}>{loc.formattedAddress}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => removeLocation(loc.place_id)} hitSlop={8}>
+                <Text style={styles.locRemove}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <LocationSearch value={null} onChange={(loc) => loc && addLocation(loc)} />
         </View>
 
         {/* Photos */}
@@ -223,6 +261,16 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
+  hint: { fontSize: 13, color: COLORS.textMuted },
+  locRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    borderWidth: 1.5, borderColor: COLORS.text, borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: 12, backgroundColor: COLORS.surface,
+  },
+  locInfo: { flex: 1 },
+  locName: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
+  locAddr: { fontSize: 13, color: COLORS.textMuted, marginTop: 1 },
+  locRemove: { fontSize: 14, ...FONT.medium, color: COLORS.error },
   photoRow: { gap: SPACING.sm, paddingVertical: 2 },
   photo: { width: 88, height: 88, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
   photoRemove: {

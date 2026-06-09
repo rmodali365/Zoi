@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FeedItem } from '@/lib/feed';
+import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { SENTIMENT_EMOJI, SENTIMENT_LABELS, TAG_LABELS } from '@/constants/experiences';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -30,7 +31,7 @@ type Props = {
 
 export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSave }: Props) {
   const author = item.user;
-  const place = [item.location.city, item.location.region].filter(Boolean).join(', ');
+  const place = localityLabel(item);
 
   return (
     <View style={styles.card}>
@@ -69,7 +70,7 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
 
       {/* Body */}
       <View style={styles.body}>
-        <Text style={styles.name}>{item.location.name}</Text>
+        <Text style={styles.name}>{experienceTitle(item)}</Text>
         {!!place && <Text style={styles.place}>{place}</Text>}
 
         <View style={styles.rankRow}>

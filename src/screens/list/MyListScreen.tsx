@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
 import { getSaves, unsaveExperience, SavedExperience } from '@/lib/saves';
+import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -176,8 +177,8 @@ export function MyListScreen() {
             <Marker
               key={item.id}
               coordinate={{ latitude: item.location.lat, longitude: item.location.lng }}
-              title={item.location.name}
-              description={[item.location.city, item.location.region].filter(Boolean).join(', ')}
+              title={experienceTitle(item)}
+              description={localityLabel(item)}
             />
           ))}
         </MapView>
@@ -196,12 +197,10 @@ export function MyListScreen() {
                 </View>
                 <View style={styles.info}>
                   <Text style={styles.name} numberOfLines={1}>
-                    {SENTIMENT_EMOJI[item.sentiment]} {item.location.name}
+                    {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
                   </Text>
-                  {!!(item.location.city || item.location.region) && (
-                    <Text style={styles.place} numberOfLines={1}>
-                      {[item.location.city, item.location.region].filter(Boolean).join(', ')}
-                    </Text>
+                  {!!localityLabel(item) && (
+                    <Text style={styles.place} numberOfLines={1}>{localityLabel(item)}</Text>
                   )}
                   {item.tags.length > 0 && (
                     <Text style={styles.tags} numberOfLines={1}>
@@ -235,11 +234,9 @@ export function MyListScreen() {
                 </View>
               )}
               <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>{item.location.name}</Text>
-                {!!(item.location.city || item.location.region) && (
-                  <Text style={styles.place} numberOfLines={1}>
-                    {[item.location.city, item.location.region].filter(Boolean).join(', ')}
-                  </Text>
+                <Text style={styles.name} numberOfLines={1}>{experienceTitle(item)}</Text>
+                {!!localityLabel(item) && (
+                  <Text style={styles.place} numberOfLines={1}>{localityLabel(item)}</Text>
                 )}
                 {!!item.user && (
                   <Text style={styles.savedBy} numberOfLines={1}>
