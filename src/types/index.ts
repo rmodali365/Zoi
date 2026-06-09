@@ -120,4 +120,5 @@ export type ProfileStackParamList = {
   ProfileHome: undefined;
   TripDetail: { tripId: string };
   UserProfile: { userId: string };
+  EditProfile: undefined;
 };
