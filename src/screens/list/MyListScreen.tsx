@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
@@ -69,6 +70,16 @@ export function MyListScreen() {
     queryKey: qk.saves,
     queryFn: getSaves,
   });
+
+  // Reset to the default view (ranked list) when leaving the tab. With caching there's
+  // no loading spinner on revisit, so reset on BLUR — the screen stays mounted, so it's
+  // already in the default state on return (no flash of the previous view).
+  useFocusEffect(
+    useCallback(() => () => {
+      setTab('ranked');
+      setRankedView('list');
+    }, []),
+  );
 
   const pins = useMemo(() => items.filter(hasValidCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);

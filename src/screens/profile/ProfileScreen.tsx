@@ -1,9 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert,
   Image, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +26,17 @@ const TRIP_CARD = 140;
 export function ProfileScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tripsRef = useRef<ScrollView>(null);
+
+  // With caching the screen no longer remounts on focus, so scroll position would
+  // persist. Reset it to the top (and the trips strip to the start) on blur.
+  useFocusEffect(
+    useCallback(() => () => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      tripsRef.current?.scrollTo({ x: 0, animated: false });
+    }, []),
+  );
 
   const { data: profile = null, isLoading: l1, refetch: rp, isRefetching: r1 } = useQuery({
     queryKey: qk.myProfile,
@@ -91,6 +103,7 @@ export function ProfileScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
@@ -155,7 +168,7 @@ export function ProfileScreen({ navigation }: Props) {
 
         {/* Trips */}
         <Text style={[styles.sectionTitle, styles.tripsTitle]}>Trips</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
+        <ScrollView ref={tripsRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
           {trips.length === 0 ? (
             <View style={[styles.tripCard, styles.tripPlaceholder]}>
               <Text style={styles.tripPlaceholderText}>No trips yet</Text>
