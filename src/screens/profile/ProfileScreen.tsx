@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert,
   Image, ActivityIndicator,
@@ -11,6 +11,7 @@ import { ProfileStackParamList, User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
 import { shareProfile } from '@/lib/share';
+import { getFollowCounts } from '@/lib/follows';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -25,8 +26,12 @@ export function ProfileScreen({ navigation }: Props) {
   const [profile, setProfile] = useState<User | null>(null);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tripsRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -34,14 +39,17 @@ export function ProfileScreen({ navigation }: Props) {
       setLoading(false);
       return;
     }
-    const [{ data: prof }, { data: exps }, { data: tr }] = await Promise.all([
+    setMyId(user.id);
+    const [{ data: prof }, { data: exps }, { data: tr }, followCounts] = await Promise.all([
       supabase.from('users').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('experiences').select('*').eq('user_id', user.id).order('rank_key', { ascending: true }),
       supabase.from('trips').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      getFollowCounts(user.id),
     ]);
     setProfile((prof as User) ?? null);
     setExperiences((exps ?? []) as Experience[]);
     setTrips((tr ?? []) as Trip[]);
+    setCounts(followCounts);
     setLoading(false);
   }, []);
 
@@ -50,6 +58,15 @@ export function ProfileScreen({ navigation }: Props) {
       setLoading(true);
       load();
     }, [load]),
+  );
+
+  // Reset scroll position (vertical + trips strip) when leaving, so returning
+  // to Profile always lands at the top.
+  useFocusEffect(
+    useCallback(() => () => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      tripsRef.current?.scrollTo({ x: 0, animated: false });
+    }, []),
   );
 
   async function handlePickAvatar() {
@@ -99,7 +116,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8}>
@@ -130,11 +147,41 @@ export function ProfileScreen({ navigation }: Props) {
                 <Ionicons name="share-outline" size={22} color={COLORS.text} />
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditProfile')}
+              activeOpacity={0.7}
+              hitSlop={8}
+            >
+              <Ionicons name="create-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
               <Text style={styles.signOut}>Sign out</Text>
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Follower / following counts */}
+        {!!myId && (
+          <View style={styles.counts}>
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'followers' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.followers}</Text>
+              <Text style={styles.countLabel}>{counts.followers === 1 ? 'follower' : 'followers'}</Text>
+            </TouchableOpacity>
+            <View style={styles.countDivider} />
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'following' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.following}</Text>
+              <Text style={styles.countLabel}>following</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Who to follow */}
         <SuggestedUsers onPressUser={(id) => navigation.navigate('UserProfile', { userId: id })} />
@@ -171,7 +218,7 @@ export function ProfileScreen({ navigation }: Props) {
 
         {/* Trips */}
         <Text style={[styles.sectionTitle, styles.tripsTitle]}>Trips</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
+        <ScrollView ref={tripsRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
           {trips.length === 0 ? (
             <View style={[styles.tripCard, styles.tripPlaceholder]}>
               <Text style={styles.tripPlaceholderText}>No trips yet</Text>
@@ -229,6 +276,17 @@ const styles = StyleSheet.create({
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
+  counts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    gap: SPACING.lg,
+  },
+  countItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  countNum: { fontSize: 16, ...FONT.bold, color: COLORS.text },
+  countLabel: { fontSize: 14, color: COLORS.textSecondary },
+  countDivider: { width: 1, height: 14, backgroundColor: COLORS.border },
   sectionTitle: {
     fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,

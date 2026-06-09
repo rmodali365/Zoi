@@ -8,6 +8,7 @@ import { User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { getUserProfile } from '@/lib/users';
 import { shareProfile } from '@/lib/share';
+import { getFollowCounts } from '@/lib/follows';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
 
 const TRIP_CARD = 140;
@@ -15,23 +16,25 @@ const TRIP_CARD = 140;
 // Read-only profile for another user. Reachable from the feed author and suggested/find
 // people. Nothing inside is interactive in v1.
 export function UserProfileScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ UserProfile: { userId: string } }, 'UserProfile'>>();
   const { userId } = route.params;
 
   const [profile, setProfile] = useState<User | null>(null);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
-    getUserProfile(userId)
-      .then((data) => {
+    Promise.all([getUserProfile(userId), getFollowCounts(userId)])
+      .then(([data, followCounts]) => {
         if (!active) return;
         setProfile(data.profile);
         setExperiences(data.experiences);
         setTrips(data.trips);
+        setCounts(followCounts);
       })
       .catch(() => {})
       .finally(() => active && setLoading(false));
@@ -69,6 +72,27 @@ export function UserProfileScreen() {
             <Text style={styles.name}>{profile?.name ?? 'User'}</Text>
             <Text style={styles.handle}>@{profile?.handle ?? 'handle'}</Text>
           </View>
+        </View>
+
+        {/* Follower / following counts */}
+        <View style={styles.counts}>
+          <TouchableOpacity
+            style={styles.countItem}
+            onPress={() => navigation.navigate('FollowList', { userId, mode: 'followers' })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.countNum}>{counts.followers}</Text>
+            <Text style={styles.countLabel}>{counts.followers === 1 ? 'follower' : 'followers'}</Text>
+          </TouchableOpacity>
+          <View style={styles.countDivider} />
+          <TouchableOpacity
+            style={styles.countItem}
+            onPress={() => navigation.navigate('FollowList', { userId, mode: 'following' })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.countNum}>{counts.following}</Text>
+            <Text style={styles.countLabel}>following</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Experiences — simplified ranked list (read-only) */}
@@ -150,6 +174,17 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  counts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    gap: SPACING.lg,
+  },
+  countItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  countNum: { fontSize: 16, ...FONT.bold, color: COLORS.text },
+  countLabel: { fontSize: 14, color: COLORS.textSecondary },
+  countDivider: { width: 1, height: 14, backgroundColor: COLORS.border },
   sectionTitle: {
     fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,

@@ -53,6 +53,39 @@ export async function getSuggestedUsers(limit = 12): Promise<UserResult[]> {
     .slice(0, limit);
 }
 
+// Follower (people who follow `userId`) and following (people `userId` follows) counts.
+export async function getFollowCounts(userId: string): Promise<{ followers: number; following: number }> {
+  const [{ count: followers }, { count: following }] = await Promise.all([
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+  ]);
+  return { followers: followers ?? 0, following: following ?? 0 };
+}
+
+// Users who follow `userId`. (follows↔users is ambiguous — name the explicit FK.)
+export async function getFollowers(userId: string): Promise<UserResult[]> {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('follower:users!follows_follower_id_fkey(id, name, handle, avatar_url)')
+    .eq('following_id', userId);
+  if (error) throw error;
+  return (data ?? [])
+    .map((r) => (r as unknown as { follower: UserResult | null }).follower)
+    .filter((u): u is UserResult => u !== null);
+}
+
+// Users `userId` follows.
+export async function getFollowing(userId: string): Promise<UserResult[]> {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('following:users!follows_following_id_fkey(id, name, handle, avatar_url)')
+    .eq('follower_id', userId);
+  if (error) throw error;
+  return (data ?? [])
+    .map((r) => (r as unknown as { following: UserResult | null }).following)
+    .filter((u): u is UserResult => u !== null);
+}
+
 export async function followUser(targetId: string): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
