@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Alert,
   Image, ActivityIndicator,
@@ -26,6 +26,8 @@ export function ProfileScreen({ navigation }: Props) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const tripsRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -49,6 +51,15 @@ export function ProfileScreen({ navigation }: Props) {
       setLoading(true);
       load();
     }, [load]),
+  );
+
+  // Reset scroll position (vertical + trips strip) when leaving, so returning
+  // to Profile always lands at the top.
+  useFocusEffect(
+    useCallback(() => () => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      tripsRef.current?.scrollTo({ x: 0, animated: false });
+    }, []),
   );
 
   async function handlePickAvatar() {
@@ -98,7 +109,7 @@ export function ProfileScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8}>
@@ -159,7 +170,7 @@ export function ProfileScreen({ navigation }: Props) {
 
         {/* Trips */}
         <Text style={[styles.sectionTitle, styles.tripsTitle]}>Trips</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
+        <ScrollView ref={tripsRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
           {trips.length === 0 ? (
             <View style={[styles.tripCard, styles.tripPlaceholder]}>
               <Text style={styles.tripPlaceholderText}>No trips yet</Text>

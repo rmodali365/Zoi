@@ -89,6 +89,15 @@ export function MyListScreen() {
     }, [load]),
   );
 
+  // Reset the view to its default (ranked list) when leaving, so returning to
+  // this tab always lands on the ranked list rather than the map / want-to-do.
+  useFocusEffect(
+    useCallback(() => () => {
+      setTab('ranked');
+      setRankedView('list');
+    }, []),
+  );
+
   const pins = useMemo(() => items.filter(hasValidCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
