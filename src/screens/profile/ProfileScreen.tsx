@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ProfileStackParamList, User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
+import { getFollowCounts } from '@/lib/follows';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -24,6 +25,8 @@ export function ProfileScreen({ navigation }: Props) {
   const [profile, setProfile] = useState<User | null>(null);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -33,14 +36,17 @@ export function ProfileScreen({ navigation }: Props) {
       setLoading(false);
       return;
     }
-    const [{ data: prof }, { data: exps }, { data: tr }] = await Promise.all([
+    setMyId(user.id);
+    const [{ data: prof }, { data: exps }, { data: tr }, followCounts] = await Promise.all([
       supabase.from('users').select('*').eq('id', user.id).maybeSingle(),
       supabase.from('experiences').select('*').eq('user_id', user.id).order('rank_key', { ascending: true }),
       supabase.from('trips').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      getFollowCounts(user.id),
     ]);
     setProfile((prof as User) ?? null);
     setExperiences((exps ?? []) as Experience[]);
     setTrips((tr ?? []) as Trip[]);
+    setCounts(followCounts);
     setLoading(false);
   }, []);
 
@@ -123,6 +129,29 @@ export function ProfileScreen({ navigation }: Props) {
             <Text style={styles.signOut}>Sign out</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Follower / following counts */}
+        {!!myId && (
+          <View style={styles.counts}>
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'followers' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.followers}</Text>
+              <Text style={styles.countLabel}>{counts.followers === 1 ? 'follower' : 'followers'}</Text>
+            </TouchableOpacity>
+            <View style={styles.countDivider} />
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'following' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.following}</Text>
+              <Text style={styles.countLabel}>following</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Who to follow */}
         <SuggestedUsers onPressUser={(id) => navigation.navigate('UserProfile', { userId: id })} />
@@ -216,6 +245,17 @@ const styles = StyleSheet.create({
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
   signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
+  counts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    gap: SPACING.lg,
+  },
+  countItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  countNum: { fontSize: 16, ...FONT.bold, color: COLORS.text },
+  countLabel: { fontSize: 14, color: COLORS.textSecondary },
+  countDivider: { width: 1, height: 14, backgroundColor: COLORS.border },
   sectionTitle: {
     fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,
