@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedStackParamList } from '@/types';
 import { getFeed, FeedItem } from '@/lib/feed';
+import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { ExperienceCard } from '@/components/ExperienceCard';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -17,16 +18,40 @@ type Props = {
 
 export function FeedScreen({ navigation }: Props) {
   const [items, setItems] = useState<FeedItem[]>([]);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setItems(await getFeed());
+      // Prefetch saved ids alongside the feed so cards render the right bookmark state.
+      const [feed, saved] = await Promise.all([getFeed(), getSavedIds()]);
+      setItems(feed);
+      setSavedIds(saved);
     } catch {
       setItems([]);
     }
   }, []);
+
+  // Optimistic bookmark toggle; reverts the local set on failure.
+  const toggleSave = useCallback(async (id: string) => {
+    const wasSaved = savedIds.has(id);
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      wasSaved ? next.delete(id) : next.add(id);
+      return next;
+    });
+    try {
+      if (wasSaved) await unsaveExperience(id);
+      else await saveExperience(id);
+    } catch {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        wasSaved ? next.add(id) : next.delete(id);
+        return next;
+      });
+    }
+  }, [savedIds]);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,7 +83,13 @@ export function FeedScreen({ navigation }: Props) {
         <FlatList
           data={items}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ExperienceCard item={item} />}
+          renderItem={({ item }) => (
+            <ExperienceCard
+              item={item}
+              saved={savedIds.has(item.id)}
+              onToggleSave={() => toggleSave(item.id)}
+            />
+          )}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
