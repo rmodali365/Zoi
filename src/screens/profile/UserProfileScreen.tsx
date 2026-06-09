@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { getUserProfile } from '@/lib/users';
+import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
 
@@ -52,6 +54,9 @@ export function UserProfileScreen() {
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹ Back</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => shareProfile(userId, profile?.handle)} hitSlop={8}>
+          <Ionicons name="share-outline" size={22} color={COLORS.text} />
         </TouchableOpacity>
       </View>
 
@@ -150,7 +155,10 @@ export function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   centered: { alignItems: 'center', justifyContent: 'center' },
-  topBar: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md },
+  topBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
+  },
   back: { fontSize: 16, ...FONT.medium, color: COLORS.accent },
   scroll: { paddingBottom: SPACING.xxl },
   header: {

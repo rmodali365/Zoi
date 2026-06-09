@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ProfileStackParamList, User, Experience, Trip } from '@/types';
 import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
+import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
@@ -137,6 +138,15 @@ export function ProfileScreen({ navigation }: Props) {
           </View>
 
           <View style={styles.headerActions}>
+            {!!profile && (
+              <TouchableOpacity
+                onPress={() => shareProfile(profile.id, profile.handle)}
+                activeOpacity={0.7}
+                hitSlop={8}
+              >
+                <Ionicons name="share-outline" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => navigation.navigate('EditProfile')}
               activeOpacity={0.7}
