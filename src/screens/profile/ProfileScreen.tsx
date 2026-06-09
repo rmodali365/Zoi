@@ -13,6 +13,8 @@ import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
 import { getMyProfile, getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
+import { shareProfile } from '@/lib/share';
+import { getFollowCounts } from '@/lib/follows';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -51,9 +53,16 @@ export function ProfileScreen({ navigation }: Props) {
     queryFn: getMyTrips,
   });
 
+  const myId = profile?.id ?? null;
+  const { data: counts = { followers: 0, following: 0 }, refetch: rc } = useQuery({
+    queryKey: ['follow-counts', myId],
+    queryFn: () => getFollowCounts(myId as string),
+    enabled: !!myId,
+  });
+
   const loading = l1 && l2 && l3;
   const refreshing = r1 || r2 || r3;
-  const onRefresh = useCallback(() => { rp(); re(); rt(); }, [rp, re, rt]);
+  const onRefresh = useCallback(() => { rp(); re(); rt(); rc(); }, [rp, re, rt, rc]);
 
   async function handlePickAvatar() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -128,10 +137,51 @@ export function ProfileScreen({ navigation }: Props) {
             <Text style={styles.handle}>@{profile?.handle ?? 'handle'}</Text>
           </View>
 
-          <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
-            <Text style={styles.signOut}>Sign out</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {!!profile && (
+              <TouchableOpacity
+                onPress={() => shareProfile(profile.id, profile.handle)}
+                activeOpacity={0.7}
+                hitSlop={8}
+              >
+                <Ionicons name="share-outline" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditProfile')}
+              activeOpacity={0.7}
+              hitSlop={8}
+            >
+              <Ionicons name="create-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSignOut} activeOpacity={0.7} hitSlop={8}>
+              <Text style={styles.signOut}>Sign out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Follower / following counts */}
+        {!!myId && (
+          <View style={styles.counts}>
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'followers' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.followers}</Text>
+              <Text style={styles.countLabel}>{counts.followers === 1 ? 'follower' : 'followers'}</Text>
+            </TouchableOpacity>
+            <View style={styles.countDivider} />
+            <TouchableOpacity
+              style={styles.countItem}
+              onPress={() => navigation.navigate('FollowList', { userId: myId, mode: 'following' })}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countNum}>{counts.following}</Text>
+              <Text style={styles.countLabel}>following</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Who to follow */}
         <SuggestedUsers onPressUser={(id) => navigation.navigate('UserProfile', { userId: id })} />
@@ -224,7 +274,19 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   signOut: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
+  counts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    gap: SPACING.lg,
+  },
+  countItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  countNum: { fontSize: 16, ...FONT.bold, color: COLORS.text },
+  countLabel: { fontSize: 14, color: COLORS.textSecondary },
+  countDivider: { width: 1, height: 14, backgroundColor: COLORS.border },
   sectionTitle: {
     fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,
