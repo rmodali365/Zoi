@@ -6,6 +6,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedStackParamList } from '@/types';
 import { searchUsers, getFollowingIds, followUser, unfollowUser, UserResult } from '@/lib/follows';
+import { queryClient } from '@/lib/queryClient';
+import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 type Props = {
@@ -57,6 +59,8 @@ export function FindPeopleScreen({ navigation }: Props) {
     try {
       if (isFollowing) await unfollowUser(id);
       else await followUser(id);
+      // Feed depends on who you follow — refresh it next time it's shown.
+      queryClient.invalidateQueries({ queryKey: qk.feed });
     } catch {
       // revert on failure
       setFollowing((prev) => {

@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { queryClient } from '@/lib/queryClient';
 import { RootStackParamList } from '@/types';
 import { AuthContext } from '@/contexts/AuthContext';
 import { AuthNavigator } from './AuthNavigator';
@@ -39,6 +40,8 @@ export function RootNavigator() {
         await checkProfile(session.user.id);
       } else {
         setProfileComplete(false);
+        // Drop all cached data so the next account never sees the previous one's.
+        queryClient.clear();
       }
     });
 
