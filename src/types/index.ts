@@ -114,11 +114,13 @@ export type FeedStackParamList = {
   FeedHome: undefined;
   FindPeople: undefined;
   UserProfile: { userId: string };
+  FollowList: { userId: string; mode: 'followers' | 'following' };
 };
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   TripDetail: { tripId: string };
   UserProfile: { userId: string };
+  FollowList: { userId: string; mode: 'followers' | 'following' };
   EditProfile: undefined;
 };
