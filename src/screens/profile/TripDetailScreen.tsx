@@ -1,25 +1,30 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity,
+  ActivityIndicator, Modal, TextInput, Alert,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
-import { Experience } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Experience, Location } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji,
 } from '@/lib/experienceDisplay';
-import { getTripDetail, groupByCity } from '@/lib/trips';
+import {
+  getTripDetail, groupByCity, addPlannedStop, removeTripItem, setTripPosition,
+  nextTripPosition, positionToMoveUp, positionToMoveDown,
+} from '@/lib/trips';
 import { getMyProfile } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
+import { LocationSearch } from '@/components/LocationSearch';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 // TripDetail is registered in both the Profile and Experiences stacks, so type
-// it structurally (it only needs goBack + the tripId param) rather than against
-// one stack's param list.
+// it structurally (it only needs goBack/navigate + the tripId param) rather than
+// against one stack's param list.
 type Props = {
   navigation: NavigationProp<Record<string, object | undefined>>;
   route: RouteProp<{ TripDetail: { tripId: string } }, 'TripDetail'>;
@@ -68,7 +73,12 @@ function formatDates(start: string | null, end: string | null): string {
 
 export function TripDetailScreen({ navigation, route }: Props) {
   const { tripId } = route.params;
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<ViewMode>('list');
+  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newLoc, setNewLoc] = useState<Location | null>(null);
+  const [newNote, setNewNote] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: qk.trip(tripId),
@@ -86,9 +96,61 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const region = useMemo(() => regionForPins(pins), [pins]);
 
   const isOwner = !!profile && !!trip && profile.id === trip.user_id;
-  const rankedCount = items.filter((i) => i.status === 'ranked').length;
-  const plannedCount = items.length - rankedCount;
+  const plannedCount = items.filter((i) => i.status === 'planned').length;
   const dates = trip ? formatDates(trip.start_date, trip.end_date) : '';
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: qk.trip(tripId) });
+
+  const addStop = useMutation({
+    mutationFn: () =>
+      addPlannedStop({
+        tripId,
+        location: newLoc as Location,
+        note: newNote.trim() || null,
+        position: nextTripPosition(items),
+      }),
+    onSuccess: () => { invalidate(); closeAdd(); },
+    onError: (e: unknown) => Alert.alert('Could not add stop', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const remove = useMutation({
+    mutationFn: (item: Experience) => removeTripItem(item),
+    onSuccess: invalidate,
+    onError: (e: unknown) => Alert.alert('Could not remove', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const move = useMutation({
+    mutationFn: ({ id, position }: { id: string; position: string }) => setTripPosition(id, position),
+    onSuccess: invalidate,
+  });
+
+  function closeAdd() {
+    setAdding(false);
+    setNewLoc(null);
+    setNewNote('');
+  }
+
+  function confirmRemove(item: Experience) {
+    Alert.alert(
+      item.status === 'planned' ? 'Remove this stop?' : 'Remove from trip?',
+      item.status === 'planned'
+        ? 'This planned stop will be deleted.'
+        : 'The experience stays in your list — it just leaves this trip.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(item) },
+      ],
+    );
+  }
+
+  // "Log a ranked experience" routes to the Log tab's AddExperience, preset to this trip.
+  function logExperience() {
+    closeAdd();
+    (navigation as NavigationProp<Record<string, object>>).navigate('Log', {
+      screen: 'AddExperience',
+      params: { tripId },
+    } as object);
+  }
 
   function countLine(): string {
     if (items.length === 0) return 'No stops yet';
@@ -103,25 +165,32 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
           <Text style={styles.back}>‹ Back</Text>
         </TouchableOpacity>
-        {items.length > 0 && (
-          <View style={styles.toggle}>
-            <TouchableOpacity
-              style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive]}
-              onPress={() => setMode('list')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="list" size={18} color={mode === 'list' ? COLORS.background : COLORS.textSecondary} />
+        <View style={styles.topActions}>
+          {isOwner && items.length > 0 && mode === 'list' && (
+            <TouchableOpacity onPress={() => setEditing((e) => !e)} hitSlop={8}>
+              <Text style={styles.editBtn}>{editing ? 'Done' : 'Edit'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleBtn, mode === 'map' && styles.toggleBtnActive]}
-              onPress={() => setMode('map')}
-              activeOpacity={0.8}
-              disabled={pins.length === 0}
-            >
-              <Ionicons name="map" size={18} color={mode === 'map' ? COLORS.background : COLORS.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+          {items.length > 0 && (
+            <View style={styles.toggle}>
+              <TouchableOpacity
+                style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive]}
+                onPress={() => setMode('list')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="list" size={18} color={mode === 'list' ? COLORS.background : COLORS.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, mode === 'map' && styles.toggleBtnActive]}
+                onPress={() => { setMode('map'); setEditing(false); }}
+                activeOpacity={0.8}
+                disabled={pins.length === 0}
+              >
+                <Ionicons name="map" size={18} color={mode === 'map' ? COLORS.background : COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </View>
 
       {isLoading ? (
@@ -162,21 +231,96 @@ export function TripDetailScreen({ navigation, route }: Props) {
             sections.map((section) => (
               <View key={section.city} style={styles.section}>
                 <Text style={styles.cityHeader}>{section.city}</Text>
-                {section.items.map((item) => (
-                  <ItineraryRow key={item.id} item={item} />
+                {section.items.map((item, i) => (
+                  <ItineraryRow
+                    key={item.id}
+                    item={item}
+                    editing={editing}
+                    canUp={i > 0}
+                    canDown={i < section.items.length - 1}
+                    onMoveUp={() => {
+                      const p = positionToMoveUp(section.items, i);
+                      if (p) move.mutate({ id: item.id, position: p });
+                    }}
+                    onMoveDown={() => {
+                      const p = positionToMoveDown(section.items, i);
+                      if (p) move.mutate({ id: item.id, position: p });
+                    }}
+                    onDelete={() => confirmRemove(item)}
+                  />
                 ))}
               </View>
             ))
           )}
+
+          {isOwner && !editing && (
+            <TouchableOpacity style={styles.addBtn} onPress={() => setAdding(true)} activeOpacity={0.8}>
+              <Ionicons name="add" size={20} color={COLORS.brand} />
+              <Text style={styles.addBtnText}>Add to itinerary</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       )}
+
+      {/* Add-stop modal */}
+      <Modal visible={adding} animationType="slide" transparent onRequestClose={closeAdd}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Add a stop</Text>
+              <TouchableOpacity onPress={closeAdd} hitSlop={8}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <LocationSearch value={newLoc} onChange={setNewLoc} />
+
+            {!!newLoc && (
+              <>
+                <TextInput
+                  style={styles.noteInput}
+                  value={newNote}
+                  onChangeText={setNewNote}
+                  placeholder="Add a note (optional) — e.g. book ahead"
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={() => addStop.mutate()}
+                  disabled={addStop.isPending}
+                  activeOpacity={0.85}
+                >
+                  {addStop.isPending
+                    ? <ActivityIndicator color={COLORS.surface} />
+                    : <Text style={styles.primaryBtnText}>Add planned stop</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity onPress={logExperience} hitSlop={8} style={styles.logLink}>
+              <Text style={styles.logLinkText}>Or log a ranked experience instead</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
+type RowProps = {
+  item: Experience;
+  editing: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDelete: () => void;
+};
+
 // One itinerary stop — planned (muted, with optional note) or ranked (sentiment +
-// quick take + photo).
-function ItineraryRow({ item }: { item: Experience }) {
+// quick take + photo). In edit mode, shows reorder + delete controls.
+function ItineraryRow({ item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete }: RowProps) {
   const planned = item.status === 'planned';
   const place = localityLabel(item);
   return (
@@ -199,7 +343,19 @@ function ItineraryRow({ item }: { item: Experience }) {
           </Text>
         )}
       </View>
-      {planned ? (
+      {editing ? (
+        <View style={styles.rowControls}>
+          <TouchableOpacity onPress={onMoveUp} disabled={!canUp} hitSlop={6}>
+            <Ionicons name="chevron-up" size={22} color={canUp ? COLORS.textSecondary : COLORS.border} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onMoveDown} disabled={!canDown} hitSlop={6}>
+            <Ionicons name="chevron-down" size={22} color={canDown ? COLORS.textSecondary : COLORS.border} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDelete} hitSlop={6}>
+            <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+          </TouchableOpacity>
+        </View>
+      ) : planned ? (
         <View style={styles.plannedPill}><Text style={styles.plannedPillText}>Planned</Text></View>
       ) : item.photos.length > 0 ? (
         <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
@@ -215,7 +371,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   back: { fontSize: 16, ...FONT.medium, color: COLORS.accent },
+  editBtn: { fontSize: 16, ...FONT.semibold, color: COLORS.brand },
   toggle: {
     flexDirection: 'row', backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, padding: 2, gap: 2,
@@ -250,13 +408,40 @@ const styles = StyleSheet.create({
   rowNote: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
   rowQuote: { fontSize: 14, color: COLORS.text, fontStyle: 'italic', marginTop: 2 },
   rowTags: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  rowControls: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
   plannedPill: {
     paddingHorizontal: SPACING.sm, paddingVertical: 3,
     borderRadius: RADIUS.full, backgroundColor: COLORS.brandLight,
   },
   plannedPillText: { fontSize: 11, ...FONT.semibold, color: COLORS.brand },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
+    borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md, marginTop: SPACING.sm,
+  },
+  addBtnText: { fontSize: 15, ...FONT.semibold, color: COLORS.brand },
   empty: { paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
   emptyTitle: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: COLORS.overlay },
+  sheet: {
+    backgroundColor: COLORS.background,
+    borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
+    padding: SPACING.xl, paddingBottom: SPACING.xxl, gap: SPACING.md, minHeight: 320,
+  },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitle: { fontSize: 20, ...FONT.bold, color: COLORS.text },
+  noteInput: {
+    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: 12, fontSize: 15, color: COLORS.text,
+    backgroundColor: COLORS.surface, minHeight: 48,
+  },
+  primaryBtn: {
+    backgroundColor: COLORS.brand, borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md, alignItems: 'center',
+  },
+  primaryBtnText: { fontSize: 16, ...FONT.semibold, color: COLORS.surface },
+  logLink: { alignItems: 'center', paddingVertical: SPACING.sm },
+  logLinkText: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
 });
