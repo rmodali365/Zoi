@@ -3,17 +3,19 @@ import {
   View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
-import { ProfileStackParamList, Trip, Experience } from '@/types';
+import { NavigationProp, RouteProp } from '@react-navigation/native';
+import { Trip, Experience } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
 import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
+// TripDetail is registered in both the Profile and Experiences stacks, so type
+// it structurally (it only needs goBack + the tripId param) rather than against
+// one stack's param list.
 type Props = {
-  navigation: NativeStackNavigationProp<ProfileStackParamList, 'TripDetail'>;
-  route: RouteProp<ProfileStackParamList, 'TripDetail'>;
+  navigation: NavigationProp<Record<string, object | undefined>>;
+  route: RouteProp<{ TripDetail: { tripId: string } }, 'TripDetail'>;
 };
 
 export function TripDetailScreen({ navigation, route }: Props) {

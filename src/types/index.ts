@@ -124,6 +124,12 @@ export type FeedStackParamList = {
   FollowList: { userId: string; mode: 'followers' | 'following' };
 };
 
+// Experiences tab (formerly "My List") — now a stack so trips are tappable.
+export type ExperiencesStackParamList = {
+  ExperiencesHome: undefined;
+  TripDetail: { tripId: string };
+};
+
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   TripDetail: { tripId: string };
