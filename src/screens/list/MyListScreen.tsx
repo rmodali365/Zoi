@@ -9,11 +9,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Experience, ExperiencesStackParamList } from '@/types';
-import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
+import { TAG_LABELS } from '@/constants/experiences';
 import { getSaves, unsaveExperience } from '@/lib/saves';
 import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
-import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
+import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -224,7 +224,7 @@ export function MyListScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.info}>
                   <Text style={styles.name} numberOfLines={1}>
-                    {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
+                    {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
                   </Text>
                   {!!localityLabel(item) && (
                     <Text style={styles.place} numberOfLines={1}>{localityLabel(item)}</Text>
@@ -284,7 +284,7 @@ export function MyListScreen({ navigation }: Props) {
                 <Image source={{ uri: item.photos[0] }} style={styles.savedThumb} />
               ) : (
                 <View style={[styles.savedThumb, styles.savedThumbPlaceholder]}>
-                  <Text style={styles.savedEmoji}>{SENTIMENT_EMOJI[item.sentiment]}</Text>
+                  <Text style={styles.savedEmoji}>{sentimentEmoji(item.sentiment)}</Text>
                 </View>
               )}
               <View style={styles.info}>
@@ -294,7 +294,7 @@ export function MyListScreen({ navigation }: Props) {
                 )}
                 {!!item.user && (
                   <Text style={styles.savedBy} numberOfLines={1}>
-                    {SENTIMENT_EMOJI[item.sentiment]} from @{item.user.handle}
+                    {sentimentEmoji(item.sentiment)} from @{item.user.handle}
                   </Text>
                 )}
                 {item.tags.length > 0 && (

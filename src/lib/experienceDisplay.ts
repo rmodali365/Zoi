@@ -1,4 +1,14 @@
-import { Location } from '@/types';
+import { Location, Sentiment } from '@/types';
+import { SENTIMENT_EMOJI, SENTIMENT_LABELS } from '@/constants/experiences';
+
+// Sentiment emoji/label, tolerant of planned stops (null sentiment → empty string).
+export function sentimentEmoji(sentiment: Sentiment | null | undefined): string {
+  return sentiment ? SENTIMENT_EMOJI[sentiment] : '';
+}
+
+export function sentimentLabel(sentiment: Sentiment | null | undefined): string {
+  return sentiment ? SENTIMENT_LABELS[sentiment] : '';
+}
 
 // Tolerant shape: works for Experience / FeedItem / SavedExperience and legacy rows
 // that only have the single `location`.

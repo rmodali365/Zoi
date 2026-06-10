@@ -5,8 +5,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Trip, Experience } from '@/types';
-import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
-import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
+import { TAG_LABELS } from '@/constants/experiences';
+import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { supabase } from '@/lib/supabase';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
@@ -72,7 +72,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 )}
                 <View style={styles.cardBody}>
                   <Text style={styles.name}>
-                    {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
+                    {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
                   </Text>
                   {!!localityLabel(item) && (
                     <Text style={styles.place}>{localityLabel(item)}</Text>
