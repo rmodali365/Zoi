@@ -11,6 +11,8 @@ export async function getMyExperiences(): Promise<Experience[]> {
     .from('experiences')
     .select('*')
     .eq('user_id', user.id)
+    // Ranked surfaces never show planned trip stops.
+    .eq('status', 'ranked')
     .order('rank_key', { ascending: true });
   return (data ?? []) as Experience[];
 }

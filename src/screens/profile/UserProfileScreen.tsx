@@ -5,9 +5,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { User, Experience, Trip } from '@/types';
-import { SENTIMENT_EMOJI } from '@/constants/experiences';
 import { getUserProfile } from '@/lib/users';
-import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
+import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
 import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
@@ -111,7 +110,7 @@ export function UserProfileScreen() {
               <Text style={styles.rank}>{i + 1}</Text>
               <View style={styles.rowInfo}>
                 <Text style={styles.rowName} numberOfLines={1}>
-                  {SENTIMENT_EMOJI[item.sentiment]} {experienceTitle(item)}
+                  {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
                 </Text>
                 {!!localityLabel(item) && (
                   <Text style={styles.rowPlace} numberOfLines={1}>{localityLabel(item)}</Text>

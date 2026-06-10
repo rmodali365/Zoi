@@ -18,6 +18,8 @@ export async function getFeed(): Promise<FeedItem[]> {
     .from('experiences')
     .select('*, user:users!experiences_user_id_fkey(id, name, handle, avatar_url), trip:trips(id, title)')
     .in('user_id', followingIds)
+    // Feed shows ranked experiences only — never planned trip stops.
+    .eq('status', 'ranked')
     .order('rank_key', { ascending: true });
   if (error) throw error;
 

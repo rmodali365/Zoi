@@ -57,7 +57,8 @@ export interface Experience {
   // Lifecycle: 'planned' = a trip stop not yet ranked; 'ranked' = logged + ranked.
   // Planned stops are hidden from all ranked surfaces (filtered by status).
   status: ExperienceStatus;
-  sentiment: Sentiment;
+  // Null for planned stops (they have no sentiment until ranked).
+  sentiment: Sentiment | null;
   // Optional membership in a trip container
   trip_id: string | null;
   // Short display headline ("SoMa bar crawl"); the primary label shown everywhere.
@@ -70,8 +71,9 @@ export interface Experience {
   tags: Tag[];
   photos: string[];
   quick_take: string;
-  // Fractional rank string — lower sorts first, scoped within (user_id, sentiment)
-  rank_key: string;
+  // Fractional rank string — lower sorts first, scoped within (user_id, sentiment).
+  // Null for planned stops (set when the stop is ranked).
+  rank_key: string | null;
   // Per-trip itinerary order (fractional index), independent of rank_key. Null
   // when the experience isn't in a trip.
   trip_position: string | null;

@@ -40,10 +40,12 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
 
     // Load the FULL ranked list — ranking is one overall list per user now.
+    // Planned trip stops are excluded; only ranked experiences are comparison candidates.
     const { data } = await supabase
       .from('experiences')
       .select('*')
       .eq('user_id', user.id)
+      .eq('status', 'ranked')
       .order('rank_key', { ascending: true });
 
     const existing = (data ?? []) as Experience[];
@@ -85,10 +87,11 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
   }
 
+  // `list` is the ranked pool (status='ranked'), so every rank_key is non-null.
   function rankKeyForPositionIn(list: Experience[], pos: number): string {
-    if (pos <= 0) return keyBefore(list[0].rank_key);
-    if (pos >= list.length) return keyAfter(list[list.length - 1].rank_key);
-    return keyBetween(list[pos - 1].rank_key, list[pos].rank_key);
+    if (pos <= 0) return keyBefore(list[0].rank_key!);
+    if (pos >= list.length) return keyAfter(list[list.length - 1].rank_key!);
+    return keyBetween(list[pos - 1].rank_key!, list[pos].rank_key!);
   }
 
   async function finalize(pos: number) {

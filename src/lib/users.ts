@@ -35,7 +35,7 @@ export type UserProfileData = {
 export async function getUserProfile(userId: string): Promise<UserProfileData> {
   const [{ data: prof }, { data: exps }, { data: tr }] = await Promise.all([
     supabase.from('users').select('*').eq('id', userId).maybeSingle(),
-    supabase.from('experiences').select('*').eq('user_id', userId).order('rank_key', { ascending: true }),
+    supabase.from('experiences').select('*').eq('user_id', userId).eq('status', 'ranked').order('rank_key', { ascending: true }),
     supabase.from('trips').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
   ]);
   return {

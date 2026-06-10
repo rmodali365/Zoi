@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FeedItem } from '@/lib/feed';
-import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
-import { SENTIMENT_EMOJI, SENTIMENT_LABELS, TAG_LABELS } from '@/constants/experiences';
+import { experienceTitle, localityLabel, sentimentEmoji, sentimentLabel } from '@/lib/experienceDisplay';
+import { TAG_LABELS } from '@/constants/experiences';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 function timeAgo(iso: string): string {
@@ -75,7 +75,7 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
 
         <View style={styles.rankRow}>
           <Text style={styles.sentiment}>
-            {SENTIMENT_EMOJI[item.sentiment]} {SENTIMENT_LABELS[item.sentiment]}
+            {sentimentEmoji(item.sentiment)} {sentimentLabel(item.sentiment)}
           </Text>
           <Text style={styles.rank}>· ranked #{item.rankPosition} of {item.authorTotal}</Text>
         </View>

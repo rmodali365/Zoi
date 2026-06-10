@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Experience } from '@/types';
-import { SENTIMENT_EMOJI } from '@/constants/experiences';
+import { sentimentEmoji } from '@/lib/experienceDisplay';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -26,7 +26,7 @@ export function ExperienceRow({ experience, rank, showThumb }: Props) {
       )}
       <View style={styles.info}>
         <AppText variant="headline" weight="semibold" numberOfLines={1}>
-          {SENTIMENT_EMOJI[experience.sentiment]} {experience.location?.name}
+          {sentimentEmoji(experience.sentiment)} {experience.location?.name}
         </AppText>
         {!!place && <AppText variant="caption" numberOfLines={1}>{place}</AppText>}
       </View>
