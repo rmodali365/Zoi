@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { AppTabParamList } from '@/types';
 import { FeedNavigator } from '@/navigation/FeedNavigator';
-import { MyListScreen } from '@/screens/list/MyListScreen';
+import { ExperiencesNavigator } from '@/navigation/ExperiencesNavigator';
 import { LogNavigator } from '@/navigation/LogNavigator';
 import { ProfileNavigator } from '@/navigation/ProfileNavigator';
 import { COLORS } from '@/constants/theme';
@@ -45,7 +45,7 @@ export function AppNavigator() {
       })}
     >
       <Tab.Screen name="Feed" component={FeedNavigator} options={{ tabBarLabel: 'Feed' }} />
-      <Tab.Screen name="List" component={MyListScreen} options={{ tabBarLabel: 'My List' }} />
+      <Tab.Screen name="List" component={ExperiencesNavigator} options={{ tabBarLabel: 'Experiences' }} />
       <Tab.Screen name="Log" component={LogNavigator} options={{ tabBarLabel: 'Log' }} />
       <Tab.Screen name="Profile" component={ProfileNavigator} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>

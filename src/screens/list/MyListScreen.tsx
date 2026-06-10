@@ -6,17 +6,21 @@ import {
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Experience } from '@/types';
+import { Experience, ExperiencesStackParamList } from '@/types';
 import { SENTIMENT_EMOJI, TAG_LABELS } from '@/constants/experiences';
 import { getSaves, unsaveExperience } from '@/lib/saves';
-import { getMyExperiences } from '@/lib/me';
+import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel } from '@/lib/experienceDisplay';
+import { TripCard } from '@/components/TripCard';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
-type ListTab = 'ranked' | 'wishlist';
+type ListTab = 'ranked' | 'trips' | 'wishlist';
 type RankedView = 'list' | 'map';
+
+type Props = NativeStackScreenProps<ExperiencesStackParamList, 'ExperiencesHome'>;
 
 // A pin only makes sense with real coordinates. Older/edge-case rows can carry
 // lat: 0, lng: 0 ("null island") — drop those rather than pinning the Atlantic.
@@ -57,7 +61,7 @@ function regionForPins(pins: Experience[]): Region {
   return { latitude, longitude, latitudeDelta, longitudeDelta };
 }
 
-export function MyListScreen() {
+export function MyListScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<ListTab>('ranked');
   // List vs map only applies to the Ranked tab (your own "everywhere I've been").
@@ -70,6 +74,10 @@ export function MyListScreen() {
   const { data: saved = [], isLoading: loadingSaves, refetch: refetchSaves, isRefetching: refSaves } = useQuery({
     queryKey: qk.saves,
     queryFn: getSaves,
+  });
+  const { data: trips = [], refetch: refetchTrips, isRefetching: refTrips } = useQuery({
+    queryKey: qk.myTrips,
+    queryFn: getMyTrips,
   });
 
   // Reset to the default view (ranked list) when leaving the tab. With caching there's
@@ -106,7 +114,8 @@ export function MyListScreen() {
   const onRefresh = useCallback(() => {
     refetchItems();
     refetchSaves();
-  }, [refetchItems, refetchSaves]);
+    refetchTrips();
+  }, [refetchItems, refetchSaves, refetchTrips]);
 
   if (loadingItems && loadingSaves) {
     return (
@@ -116,19 +125,20 @@ export function MyListScreen() {
     );
   }
 
-  const refreshing = refItems || refSaves;
+  const refreshing = refItems || refSaves || refTrips;
   const showMap = tab === 'ranked' && rankedView === 'map';
+
+  const subtitle =
+    tab === 'ranked' ? `${items.length} ${items.length === 1 ? 'place' : 'places'} ranked`
+    : tab === 'trips' ? `${trips.length} ${trips.length === 1 ? 'trip' : 'trips'}`
+    : `${saved.length} ${saved.length === 1 ? 'place' : 'places'} to do`;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>My list</Text>
-          <Text style={styles.subtitle}>
-            {tab === 'ranked'
-              ? `${items.length} ${items.length === 1 ? 'place' : 'places'} ranked`
-              : `${saved.length} ${saved.length === 1 ? 'place' : 'places'} to do`}
-          </Text>
+          <Text style={styles.title}>Experiences</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
         {/* List/map toggle — only meaningful for your own ranked experiences. */}
         {tab === 'ranked' && (
@@ -167,6 +177,13 @@ export function MyListScreen() {
           activeOpacity={0.8}
         >
           <Text style={[styles.segmentText, tab === 'ranked' && styles.segmentTextActive]}>Ranked</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, tab === 'trips' && styles.segmentBtnActive]}
+          onPress={() => setTab('trips')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, tab === 'trips' && styles.segmentTextActive]}>Trips</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segmentBtn, tab === 'wishlist' && styles.segmentBtnActive]}
@@ -223,6 +240,29 @@ export function MyListScreen() {
                 )}
               </View>
             ))}
+          </ScrollView>
+        )
+      ) : tab === 'trips' ? (
+        trips.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No trips yet</Text>
+            <Text style={styles.emptyBody}>Start a trip from the Log tab to group experiences into an itinerary.</Text>
+          </View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+          >
+            <View style={styles.tripGrid}>
+              {trips.map((trip) => (
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  onPress={() => navigation.navigate('TripDetail', { tripId: trip.id })}
+                />
+              ))}
+            </View>
           </ScrollView>
         )
       ) : saved.length === 0 ? (
@@ -325,6 +365,12 @@ const styles = StyleSheet.create({
   segmentText: { fontSize: 14, ...FONT.semibold, color: COLORS.textSecondary },
   segmentTextActive: { color: COLORS.background },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxl },
+  tripGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: SPACING.lg,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
