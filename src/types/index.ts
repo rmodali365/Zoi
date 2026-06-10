@@ -1,6 +1,9 @@
 // Sentiment tier — drives ranking scope and score range
 export type Sentiment = 'loved' | 'liked' | 'fine';
 
+// Experience lifecycle — 'planned' stops live in a trip but aren't ranked yet.
+export type ExperienceStatus = 'planned' | 'ranked';
+
 export type Tag =
   | 'outdoors' | 'drinks' | 'culture' | 'nightlife' | 'active' | 'chill' | 'food-adjacent'
   | 'wine' | 'beach' | 'ski' | 'food-focused' | 'scenic-drive'
@@ -51,6 +54,9 @@ export interface Trip {
 export interface Experience {
   id: string;
   user_id: string;
+  // Lifecycle: 'planned' = a trip stop not yet ranked; 'ranked' = logged + ranked.
+  // Planned stops are hidden from all ranked surfaces (filtered by status).
+  status: ExperienceStatus;
   sentiment: Sentiment;
   // Optional membership in a trip container
   trip_id: string | null;
@@ -66,6 +72,11 @@ export interface Experience {
   quick_take: string;
   // Fractional rank string — lower sorts first, scoped within (user_id, sentiment)
   rank_key: string;
+  // Per-trip itinerary order (fractional index), independent of rank_key. Null
+  // when the experience isn't in a trip.
+  trip_position: string | null;
+  // Optional reminder text on a planned stop.
+  note: string | null;
   created_at: string;
   updated_at: string;
   // Joined

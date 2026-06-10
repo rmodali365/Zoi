@@ -85,8 +85,13 @@ create trigger trips_updated_at
 create table public.experiences (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references public.users(id) on delete cascade not null,
-  -- Coarse gut reaction; seeds the starting third of the overall ranked list
-  sentiment text not null check (sentiment in ('loved', 'liked', 'fine')),
+  -- Lifecycle: 'planned' = a trip stop not yet ranked (no sentiment/rank_key);
+  -- 'ranked' = logged + ranked. Planned stops are hidden from ranked surfaces
+  -- (see migration 20260609010000_experience_status_and_trip_position).
+  status text not null default 'ranked' check (status in ('planned', 'ranked')),
+  -- Coarse gut reaction; seeds the starting third of the overall ranked list.
+  -- Null for planned stops.
+  sentiment text check (sentiment in ('loved', 'liked', 'fine')),
   -- Optional membership in a trip container
   trip_id uuid references public.trips(id) on delete set null,
   -- Short display headline ("SoMa bar crawl"); backfilled from location name
@@ -99,8 +104,13 @@ create table public.experiences (
   tags text[] not null default '{}',
   photos text[] not null default '{}',
   quick_take text not null default '',
-  -- Fractional index string ordering the single overall list per user
-  rank_key text not null,
+  -- Fractional index string ordering the single overall list per user.
+  -- Null for planned stops.
+  rank_key text,
+  -- Per-trip itinerary order (fractional index), independent of rank_key.
+  trip_position text,
+  -- Optional reminder text on a planned stop.
+  note text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -123,6 +133,10 @@ create index experiences_user_rank
 -- Index for fetching a trip's experiences
 create index experiences_trip
   on public.experiences (trip_id);
+
+-- Index for fetching a trip's itinerary in order
+create index experiences_trip_position
+  on public.experiences (trip_id, trip_position);
 
 create trigger experiences_updated_at
   before update on public.experiences
