@@ -1,4 +1,4 @@
-// Beli-inspired: cream backgrounds, warm minimal aesthetic
+// Beli-inspired: cream backgrounds, warm minimal aesthetic, ocean-blue brand accent.
 export const COLORS = {
   background: '#FAF8F5',
   surface: '#FFFFFF',
@@ -8,6 +8,10 @@ export const COLORS = {
   textMuted: '#B0ABA5',
   accent: '#2D2926',
   accentLight: '#EDE8E2',
+  // Brand: deep ocean blue. Used selectively for standout elements (primary CTAs,
+  // active toggles, follow, bookmarks). brandLight tints chips/badges/active bg.
+  brand: '#0E7C9D',
+  brandLight: '#E3F1F6',
   error: '#C0392B',
 };
 
@@ -32,4 +36,16 @@ export const FONT = {
   medium: { fontWeight: '500' as const },
   semibold: { fontWeight: '600' as const },
   bold: { fontWeight: '700' as const },
+};
+
+// Type scale — the single source of font sizes. Prefer the <AppText> component
+// (which maps variants to these) over raw fontSize in screens.
+export const FONT_SIZE = {
+  footnote: 12,
+  caption: 13,
+  subhead: 14,
+  body: 15,
+  headline: 17,
+  title: 20,
+  display: 28,
 };

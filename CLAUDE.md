@@ -23,12 +23,13 @@ npx expo start --clear  # when Metro serves stale modules (common after deletes/
 npm run ios             # iOS simulator
 ```
 
-There is **no linter** configured and that's fine — most "syntax errors" seen in the
-editor are a stale TS server (restart: Cmd+Shift+P → "TypeScript: Restart TS Server")
-or a stale Metro cache (`--clear`). Source of truth for "does it compile" is:
+Many "syntax errors" seen in the editor are a stale TS server (restart: Cmd+Shift+P →
+"TypeScript: Restart TS Server") or a stale Metro cache (`--clear`). Both gates must be
+clean before considering work done:
 
 ```sh
-./node_modules/.bin/tsc --noEmit    # must be clean before considering work done
+npm run typecheck    # tsc --noEmit
+npm run lint         # eslint — enforces design tokens (react-native/no-color-literals)
 ```
 
 ## File structure
@@ -112,8 +113,12 @@ are reintroduced, but nothing displays it. Sentiment is kept as metadata (emoji 
 ## Conventions
 
 - **Path alias:** `@/` → `src/` (configured in both `babel.config.js` and `tsconfig.json`).
-- **Styling:** always use tokens from `@/constants/theme` (COLORS/SPACING/RADIUS/FONT);
-  Beli-inspired warm cream aesthetic. No external UI lib.
+- **Styling / design system:** tokens in `@/constants/theme` (COLORS/SPACING/RADIUS/FONT/
+  FONT_SIZE) are the source of truth — `no-color-literals` is lint-enforced. Use `<AppText
+  variant=…>` instead of raw `fontSize`, and the primitives in `src/components/ui/`
+  (Avatar/Chip/Card/SegmentedControl) + domain components (ExperienceCard/ExperienceRow/
+  TripCard/UserRow). Brand = ocean blue `COLORS.brand` for standout elements only. See
+  `src/components/README.md`. Beli-inspired warm cream aesthetic; no external UI lib.
 - **Screens:** functional components, `StyleSheet.create` at bottom, typed nav props.
 - **RLS everywhere:** users read their own rows + rows from people they follow.
 
