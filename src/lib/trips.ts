@@ -21,6 +21,26 @@ export async function getTripDetail(tripId: string): Promise<TripDetail> {
   return { trip: (t as Trip) ?? null, items: (exps ?? []) as Experience[] };
 }
 
+// Accepts 'YYYY-MM-DD' (or empty → null). Throws on a non-empty malformed value
+// so callers can surface a friendly message.
+export function parseDateInput(s: string): string | null {
+  const t = s.trim();
+  if (!t) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || Number.isNaN(new Date(t).getTime())) {
+    throw new Error('Use the date format YYYY-MM-DD.');
+  }
+  return t;
+}
+
+// Update a trip's editable fields (owner only, enforced by RLS).
+export async function updateTrip(
+  tripId: string,
+  fields: Partial<Pick<Trip, 'title' | 'destination' | 'start_date' | 'end_date' | 'cover_photo'>>,
+): Promise<void> {
+  const { error } = await supabase.from('trips').update(fields).eq('id', tripId);
+  if (error) throw error;
+}
+
 export type CitySection = { city: string; items: Experience[] };
 
 // Group itinerary items into city sections. Input is assumed already ordered by
