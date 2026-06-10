@@ -137,6 +137,7 @@ export type FeedStackParamList = {
   FindPeople: undefined;
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
+  TripDetail: { tripId: string };
 };
 
 // Experiences tab (formerly "My List") — now a stack so trips are tappable.

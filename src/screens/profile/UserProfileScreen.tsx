@@ -120,7 +120,7 @@ export function UserProfileScreen() {
           ))
         )}
 
-        {/* Trips — read-only, not tappable */}
+        {/* Trips — tap to view the itinerary (and save/copy stops from it) */}
         <Text style={[styles.sectionTitle, styles.tripsTitle]}>Trips</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
           {trips.length === 0 ? (
@@ -129,7 +129,12 @@ export function UserProfileScreen() {
             </View>
           ) : (
             trips.map((trip) => (
-              <View key={trip.id} style={styles.tripCard}>
+              <TouchableOpacity
+                key={trip.id}
+                style={styles.tripCard}
+                onPress={() => navigation.navigate('TripDetail', { tripId: trip.id })}
+                activeOpacity={0.85}
+              >
                 {trip.cover_photo ? (
                   <Image source={{ uri: trip.cover_photo }} style={styles.tripCover} />
                 ) : (
@@ -141,7 +146,7 @@ export function UserProfileScreen() {
                 {!!trip.destination && (
                   <Text style={styles.tripDest} numberOfLines={1}>{trip.destination}</Text>
                 )}
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </ScrollView>

@@ -114,3 +114,30 @@ export async function setTripPosition(itemId: string, position: string): Promise
     .eq('id', itemId);
   if (error) throw error;
 }
+
+// Copy another user's stop into one of your own trips as a fresh planned stop
+// (place + note only — the original's ranking/quick take are left behind). Lands
+// at the end of the target trip's itinerary.
+export async function copyStopToTrip(item: Experience, tripId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+  const { data: rows } = await supabase
+    .from('experiences').select('trip_position, rank_key').eq('trip_id', tripId);
+  const ps = (rows ?? [])
+    .map((r) => r.trip_position ?? r.rank_key)
+    .filter((p): p is string => !!p)
+    .sort();
+  const position = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
+  const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
+  const { error } = await supabase.from('experiences').insert({
+    user_id: user.id,
+    status: 'planned',
+    trip_id: tripId,
+    title: item.title ?? locs[0]?.name ?? 'Stop',
+    locations: locs,
+    location: locs[0] ?? null,
+    note: item.note,
+    trip_position: position,
+  });
+  if (error) throw error;
+}

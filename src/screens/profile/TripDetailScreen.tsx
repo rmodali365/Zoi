@@ -15,9 +15,10 @@ import {
 } from '@/lib/experienceDisplay';
 import {
   getTripDetail, groupByCity, addPlannedStop, removeTripItem, setTripPosition,
-  nextTripPosition, positionToMoveUp, positionToMoveDown,
+  nextTripPosition, positionToMoveUp, positionToMoveDown, copyStopToTrip,
 } from '@/lib/trips';
-import { getMyProfile } from '@/lib/me';
+import { getMyProfile, getMyTrips } from '@/lib/me';
+import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
@@ -79,12 +80,16 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const [adding, setAdding] = useState(false);
   const [newLoc, setNewLoc] = useState<Location | null>(null);
   const [newNote, setNewNote] = useState('');
+  // The stop a visitor is copying into one of their own trips (drives the picker).
+  const [pickerItem, setPickerItem] = useState<Experience | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: qk.trip(tripId),
     queryFn: () => getTripDetail(tripId),
   });
   const { data: profile } = useQuery({ queryKey: qk.myProfile, queryFn: getMyProfile });
+  const { data: savedIds = new Set<string>() } = useQuery({ queryKey: qk.savedIds, queryFn: getSavedIds });
+  const { data: myTrips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
 
   // Refetch on focus so items added/edited elsewhere show up on return.
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
@@ -122,6 +127,28 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const move = useMutation({
     mutationFn: ({ id, position }: { id: string; position: string }) => setTripPosition(id, position),
     onSuccess: invalidate,
+  });
+
+  // Visitor: bookmark a ranked stop to Want-to-do.
+  const toggleSave = useMutation({
+    mutationFn: ({ id, saved }: { id: string; saved: boolean }) =>
+      saved ? unsaveExperience(id) : saveExperience(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.savedIds });
+      queryClient.invalidateQueries({ queryKey: qk.saves });
+    },
+  });
+
+  // Visitor: copy a stop into one of your own trips as a planned stop.
+  const copyStop = useMutation({
+    mutationFn: ({ item, toTripId }: { item: Experience; toTripId: string }) =>
+      copyStopToTrip(item, toTripId),
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: qk.trip(vars.toTripId) });
+      setPickerItem(null);
+      Alert.alert('Added to your trip', 'Saved as a planned stop you can rank later.');
+    },
+    onError: (e: unknown) => Alert.alert('Could not add', e instanceof Error ? e.message : 'Try again.'),
   });
 
   function closeAdd() {
@@ -267,8 +294,11 @@ export function TripDetailScreen({ navigation, route }: Props) {
                       if (p) move.mutate({ id: item.id, position: p });
                     }}
                     onDelete={() => confirmRemove(item)}
-                    canRank={isOwner}
+                    isOwner={isOwner}
                     onRank={() => rankStop(item)}
+                    saved={savedIds.has(item.id)}
+                    onToggleSave={() => toggleSave.mutate({ id: item.id, saved: savedIds.has(item.id) })}
+                    onAddToTrip={() => setPickerItem(item)}
                   />
                 ))}
               </View>
@@ -326,6 +356,40 @@ export function TripDetailScreen({ navigation, route }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* Visitor "add to my trip" picker */}
+      <Modal visible={!!pickerItem} animationType="slide" transparent onRequestClose={() => setPickerItem(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Add to which trip?</Text>
+              <TouchableOpacity onPress={() => setPickerItem(null)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {myTrips.length === 0 ? (
+              <Text style={styles.pickerEmpty}>
+                You don’t have any trips yet. Start one from the Log tab first.
+              </Text>
+            ) : (
+              <ScrollView style={styles.pickerList}>
+                {myTrips.map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={styles.pickerRow}
+                    onPress={() => pickerItem && copyStop.mutate({ item: pickerItem, toTripId: t.id })}
+                    disabled={copyStop.isPending}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.pickerRowTitle}>{t.title}</Text>
+                    {!!t.destination && <Text style={styles.pickerRowDest}>{t.destination}</Text>}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -338,15 +402,19 @@ type RowProps = {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDelete: () => void;
-  canRank: boolean;
+  isOwner: boolean;
   onRank: () => void;
+  saved: boolean;
+  onToggleSave: () => void;
+  onAddToTrip: () => void;
 };
 
 // One itinerary stop — planned (muted, with optional note) or ranked (sentiment +
-// quick take + photo). In edit mode, shows reorder + delete controls. An owner can
-// "Rank" a planned stop to graduate it into a ranked experience.
+// quick take + photo). Owners get edit/reorder/delete + "Rank" on planned stops;
+// visitors get "save to Want-to-do" (ranked) + "add to my trip" on every stop.
 function ItineraryRow({
-  item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete, canRank, onRank,
+  item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
+  isOwner, onRank, saved, onToggleSave, onAddToTrip,
 }: RowProps) {
   const planned = item.status === 'planned';
   const place = localityLabel(item);
@@ -382,14 +450,21 @@ function ItineraryRow({
             <Ionicons name="trash-outline" size={20} color={COLORS.error} />
           </TouchableOpacity>
         </View>
-      ) : planned ? (
-        canRank ? (
-          <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
-            <Text style={styles.rankBtnText}>Rank</Text>
+      ) : !isOwner ? (
+        <View style={styles.rowControls}>
+          {!planned && (
+            <TouchableOpacity onPress={onToggleSave} hitSlop={6}>
+              <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.accent} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={onAddToTrip} hitSlop={6}>
+            <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
           </TouchableOpacity>
-        ) : (
-          <View style={styles.plannedPill}><Text style={styles.plannedPillText}>Planned</Text></View>
-        )
+        </View>
+      ) : planned ? (
+        <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
+          <Text style={styles.rankBtnText}>Rank</Text>
+        </TouchableOpacity>
       ) : item.photos.length > 0 ? (
         <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
       ) : null}
@@ -443,11 +518,6 @@ const styles = StyleSheet.create({
   rowTags: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   rowControls: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
-  plannedPill: {
-    paddingHorizontal: SPACING.sm, paddingVertical: 3,
-    borderRadius: RADIUS.full, backgroundColor: COLORS.brandLight,
-  },
-  plannedPillText: { fontSize: 11, ...FONT.semibold, color: COLORS.brand },
   rankBtn: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2,
     borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
@@ -482,4 +552,11 @@ const styles = StyleSheet.create({
   primaryBtnText: { fontSize: 16, ...FONT.semibold, color: COLORS.surface },
   logLink: { alignItems: 'center', paddingVertical: SPACING.sm },
   logLinkText: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
+  pickerEmpty: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, paddingVertical: SPACING.md },
+  pickerList: { maxHeight: 320 },
+  pickerRow: {
+    paddingVertical: SPACING.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
+  },
+  pickerRowTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
+  pickerRowDest: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
 });
