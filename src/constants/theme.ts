@@ -13,6 +13,8 @@ export const COLORS = {
   brand: '#0E7C9D',
   brandLight: '#E3F1F6',
   error: '#C0392B',
+  // Scrim behind modal bottom-sheets.
+  overlay: 'rgba(0,0,0,0.35)',
 };
 
 export const SPACING = {

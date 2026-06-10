@@ -114,10 +114,25 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       }
     }
 
+    // When logging into a trip, append this stop to the end of its itinerary.
+    let tripPosition: string | null = null;
+    if (draft.trip_id) {
+      const { data: rows } = await supabase
+        .from('experiences')
+        .select('trip_position, rank_key')
+        .eq('trip_id', draft.trip_id);
+      const ps = (rows ?? [])
+        .map((r) => r.trip_position ?? r.rank_key)
+        .filter((p): p is string => !!p)
+        .sort();
+      tripPosition = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
+    }
+
     const { error } = await supabase.from('experiences').insert({
       user_id: user.id,
       sentiment: s,
       trip_id: draft.trip_id,
+      trip_position: tripPosition,
       title: draft.title,
       locations: draft.locations,
       // Representative location (= locations[0]) for the map pin / legacy reads.
@@ -137,6 +152,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     // New experience affects the user's My List + Profile (and trip averages).
     queryClient.invalidateQueries({ queryKey: qk.myExperiences });
     queryClient.invalidateQueries({ queryKey: qk.myTrips });
+    if (draft.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(draft.trip_id) });
 
     const place = draft.title;
     const isFirst = total === 1;
