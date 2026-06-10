@@ -5,6 +5,7 @@ import { FeedScreen } from '@/screens/feed/FeedScreen';
 import { FindPeopleScreen } from '@/screens/feed/FindPeopleScreen';
 import { UserProfileScreen } from '@/screens/profile/UserProfileScreen';
 import { FollowListScreen } from '@/screens/profile/FollowListScreen';
+import { TripDetailScreen } from '@/screens/profile/TripDetailScreen';
 
 const Stack = createNativeStackNavigator<FeedStackParamList>();
 
@@ -15,6 +16,7 @@ export function FeedNavigator() {
       <Stack.Screen name="FindPeople" component={FindPeopleScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="FollowList" component={FollowListScreen} />
+      <Stack.Screen name="TripDetail" component={TripDetailScreen} />
     </Stack.Navigator>
   );
 }
