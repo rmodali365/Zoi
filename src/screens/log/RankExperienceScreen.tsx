@@ -20,7 +20,7 @@ type Props = {
 };
 
 export function RankExperienceScreen({ navigation, route }: Props) {
-  const { draft } = route.params;
+  const { draft, experienceId } = route.params;
 
   const [phase, setPhase] = useState<'sentiment' | 'comparing' | 'saving'>('sentiment');
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
@@ -103,6 +103,26 @@ export function RankExperienceScreen({ navigation, route }: Props) {
   async function save(s: Sentiment, rankKey: string, pos: number, total: number) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+
+    // Graduating an existing planned stop: flip it to ranked in place, keeping its
+    // trip membership, position, place, photos and note untouched.
+    if (experienceId) {
+      const { error: updateError } = await supabase
+        .from('experiences')
+        .update({ status: 'ranked', sentiment: s, rank_key: rankKey })
+        .eq('id', experienceId);
+      if (updateError) {
+        Alert.alert('Error', updateError.message);
+        setPhase('comparing');
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+      queryClient.invalidateQueries({ queryKey: qk.myTrips });
+      if (draft.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(draft.trip_id) });
+      Alert.alert('Ranked!', `${draft.title} landed at #${pos + 1} of ${total}.`,
+        [{ text: 'Done', onPress: () => navigation.popToTop() }]);
+      return;
+    }
 
     // Upload photos to Storage first; save without them if upload fails.
     let photoUrls: string[] = [];
