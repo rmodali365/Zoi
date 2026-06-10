@@ -126,7 +126,9 @@ export type ExperienceDraft = {
 export type LogStackParamList = {
   LogHome: undefined;
   AddExperience: { tripId?: string } | undefined;
-  RankExperience: { draft: ExperienceDraft };
+  // experienceId set when ranking ("graduating") an existing planned trip stop —
+  // save updates that row in place instead of inserting a new experience.
+  RankExperience: { draft: ExperienceDraft; experienceId?: string };
   StartTrip: undefined;
 };
 

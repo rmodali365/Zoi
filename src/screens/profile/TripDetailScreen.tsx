@@ -152,6 +152,26 @@ export function TripDetailScreen({ navigation, route }: Props) {
     } as object);
   }
 
+  // Graduate a planned stop: hand its details to the ranking flow, which updates the
+  // existing row in place (keeping it in the trip at its position) once ranked.
+  function rankStop(item: Experience) {
+    const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
+    (navigation as NavigationProp<Record<string, object>>).navigate('Log', {
+      screen: 'RankExperience',
+      params: {
+        draft: {
+          title: experienceTitle(item),
+          locations: locs,
+          tags: item.tags,
+          photos: item.photos,
+          quick_take: item.quick_take,
+          trip_id: item.trip_id,
+        },
+        experienceId: item.id,
+      },
+    } as object);
+  }
+
   function countLine(): string {
     if (items.length === 0) return 'No stops yet';
     const parts = [`${items.length} ${items.length === 1 ? 'stop' : 'stops'}`];
@@ -247,6 +267,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
                       if (p) move.mutate({ id: item.id, position: p });
                     }}
                     onDelete={() => confirmRemove(item)}
+                    canRank={isOwner}
+                    onRank={() => rankStop(item)}
                   />
                 ))}
               </View>
@@ -316,11 +338,16 @@ type RowProps = {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onDelete: () => void;
+  canRank: boolean;
+  onRank: () => void;
 };
 
 // One itinerary stop — planned (muted, with optional note) or ranked (sentiment +
-// quick take + photo). In edit mode, shows reorder + delete controls.
-function ItineraryRow({ item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete }: RowProps) {
+// quick take + photo). In edit mode, shows reorder + delete controls. An owner can
+// "Rank" a planned stop to graduate it into a ranked experience.
+function ItineraryRow({
+  item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete, canRank, onRank,
+}: RowProps) {
   const planned = item.status === 'planned';
   const place = localityLabel(item);
   return (
@@ -356,7 +383,13 @@ function ItineraryRow({ item, editing, canUp, canDown, onMoveUp, onMoveDown, onD
           </TouchableOpacity>
         </View>
       ) : planned ? (
-        <View style={styles.plannedPill}><Text style={styles.plannedPillText}>Planned</Text></View>
+        canRank ? (
+          <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
+            <Text style={styles.rankBtnText}>Rank</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.plannedPill}><Text style={styles.plannedPillText}>Planned</Text></View>
+        )
       ) : item.photos.length > 0 ? (
         <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
       ) : null}
@@ -415,6 +448,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, backgroundColor: COLORS.brandLight,
   },
   plannedPillText: { fontSize: 11, ...FONT.semibold, color: COLORS.brand },
+  rankBtn: {
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
+  },
+  rankBtnText: { fontSize: 13, ...FONT.semibold, color: COLORS.surface },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
     borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: RADIUS.md,
