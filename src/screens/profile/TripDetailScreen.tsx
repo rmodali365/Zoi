@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,9 +17,12 @@ import {
 import {
   getTripDetail, groupByCity, addPlannedStop, removeTripItem, setTripPosition,
   nextTripPosition, positionToMoveUp, positionToMoveDown, copyStopToTrip,
+  updateTrip, parseDateInput,
 } from '@/lib/trips';
 import { getMyProfile, getMyTrips } from '@/lib/me';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
+import { uploadExperiencePhotos } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
@@ -82,6 +86,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const [newNote, setNewNote] = useState('');
   // The stop a visitor is copying into one of their own trips (drives the picker).
   const [pickerItem, setPickerItem] = useState<Experience | null>(null);
+  // Edit-trip-details sheet (owner).
+  const [editingTrip, setEditingTrip] = useState(false);
+  const [eTitle, setETitle] = useState('');
+  const [eDest, setEDest] = useState('');
+  const [eStart, setEStart] = useState('');
+  const [eEnd, setEEnd] = useState('');
+  const [eCover, setECover] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: qk.trip(tripId),
@@ -156,6 +167,47 @@ export function TripDetailScreen({ navigation, route }: Props) {
     setNewLoc(null);
     setNewNote('');
   }
+
+  function openEditTrip() {
+    if (!trip) return;
+    setETitle(trip.title);
+    setEDest(trip.destination ?? '');
+    setEStart(trip.start_date ?? '');
+    setEEnd(trip.end_date ?? '');
+    setECover(trip.cover_photo);
+    setEditingTrip(true);
+  }
+
+  async function pickEditCover() {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (!result.canceled) setECover(result.assets[0].uri);
+  }
+
+  const saveTrip = useMutation({
+    mutationFn: async () => {
+      if (!eTitle.trim()) throw new Error('Give the trip a name.');
+      const start = parseDateInput(eStart);
+      const end = parseDateInput(eEnd);
+      let cover = eCover;
+      if (eCover) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) [cover] = await uploadExperiencePhotos(user.id, [eCover]);
+      }
+      await updateTrip(tripId, {
+        title: eTitle.trim(),
+        destination: eDest.trim() || null,
+        start_date: start,
+        end_date: end,
+        cover_photo: cover,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.trip(tripId) });
+      queryClient.invalidateQueries({ queryKey: qk.myTrips });
+      setEditingTrip(false);
+    },
+    onError: (e: unknown) => Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.'),
+  });
 
   function confirmRemove(item: Experience) {
     Alert.alert(
@@ -260,7 +312,14 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Header */}
           {!!trip?.cover_photo && <Image source={{ uri: trip.cover_photo }} style={styles.cover} />}
-          <Text style={styles.title}>{trip?.title ?? 'Trip'}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{trip?.title ?? 'Trip'}</Text>
+            {isOwner && (
+              <TouchableOpacity onPress={openEditTrip} hitSlop={8}>
+                <Ionicons name="create-outline" size={22} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
           {!!trip?.destination && <Text style={styles.destination}>{trip.destination}</Text>}
           {!!dates && <Text style={styles.dates}>{dates}</Text>}
           <Text style={styles.count}>{countLine()}</Text>
@@ -390,6 +449,60 @@ export function TripDetailScreen({ navigation, route }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* Edit trip details (owner) */}
+      <Modal visible={editingTrip} animationType="slide" transparent onRequestClose={() => setEditingTrip(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Edit trip</Text>
+              <TouchableOpacity onPress={() => setEditingTrip(false)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.editForm}>
+              <TouchableOpacity style={styles.coverPicker} onPress={pickEditCover} activeOpacity={0.85}>
+                {eCover ? (
+                  <Image source={{ uri: eCover }} style={styles.editCover} />
+                ) : (
+                  <View style={[styles.editCover, styles.coverPlaceholder]}>
+                    <Ionicons name="image-outline" size={26} color={COLORS.textMuted} />
+                    <Text style={styles.coverHint}>Add a cover photo</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <TextInput
+                style={styles.noteInput} value={eTitle} onChangeText={setETitle}
+                placeholder="Trip name" placeholderTextColor={COLORS.textMuted}
+              />
+              <TextInput
+                style={styles.noteInput} value={eDest} onChangeText={setEDest}
+                placeholder="Destination (optional)" placeholderTextColor={COLORS.textMuted} autoCorrect={false}
+              />
+              <View style={styles.dateRow}>
+                <TextInput
+                  style={[styles.noteInput, styles.dateInput]} value={eStart} onChangeText={setEStart}
+                  placeholder="Start YYYY-MM-DD" placeholderTextColor={COLORS.textMuted}
+                  autoCapitalize="none" autoCorrect={false}
+                />
+                <TextInput
+                  style={[styles.noteInput, styles.dateInput]} value={eEnd} onChangeText={setEEnd}
+                  placeholder="End YYYY-MM-DD" placeholderTextColor={COLORS.textMuted}
+                  autoCapitalize="none" autoCorrect={false}
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.primaryBtn} onPress={() => saveTrip.mutate()}
+                disabled={saveTrip.isPending} activeOpacity={0.85}
+              >
+                {saveTrip.isPending
+                  ? <ActivityIndicator color={COLORS.surface} />
+                  : <Text style={styles.primaryBtnText}>Save</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -494,7 +607,8 @@ const styles = StyleSheet.create({
     width: '100%', height: 180, borderRadius: RADIUS.lg,
     backgroundColor: COLORS.border, marginBottom: SPACING.md,
   },
-  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
+  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5, flex: 1 },
   destination: { fontSize: 16, color: COLORS.textSecondary, marginTop: 2 },
   dates: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
   count: { fontSize: 14, color: COLORS.textMuted, marginTop: SPACING.xs, marginBottom: SPACING.lg },
@@ -559,4 +673,11 @@ const styles = StyleSheet.create({
   },
   pickerRowTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
   pickerRowDest: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
+  editForm: { gap: SPACING.md, paddingTop: SPACING.sm },
+  coverPicker: { borderRadius: RADIUS.md, overflow: 'hidden' },
+  editCover: { width: '100%', height: 140, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
+  coverPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
+  coverHint: { fontSize: 13, color: COLORS.textMuted },
+  dateRow: { flexDirection: 'row', gap: SPACING.md },
+  dateInput: { flex: 1 },
 });
