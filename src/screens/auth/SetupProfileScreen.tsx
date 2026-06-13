@@ -7,7 +7,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
-import { supabase } from '@/lib/supabase';
+import { getMyUserId } from '@/lib/auth';
+import { cleanHandle, createProfile, handleTaken } from '@/lib/users';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -23,47 +24,31 @@ export function SetupProfileScreen({ route }: Props) {
   const [handle, setHandle] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleClean = handle.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const handleClean = cleanHandle(handle);
   const canContinue = name.trim().length > 0 && handleClean.length >= 2 && !loading;
 
   async function handleContinue() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      Alert.alert('Error', 'Session expired. Please sign in again.');
+    try {
+      const userId = await getMyUserId();
+      if (!userId) {
+        Alert.alert('Error', 'Session expired. Please sign in again.');
+        return;
+      }
+
+      if (await handleTaken(handleClean)) {
+        Alert.alert('Handle taken', 'That handle is already in use. Pick another.');
+        return;
+      }
+
+      await createProfile({ id: userId, name: name.trim(), handle: handleClean, phone });
+      // Signals RootNavigator to switch to App
+      setProfileComplete(true);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not create your profile.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Check handle uniqueness
-    const { data: existing } = await supabase
-      .from('users')
-      .select('id')
-      .eq('handle', handleClean)
-      .maybeSingle();
-
-    if (existing) {
-      Alert.alert('Handle taken', 'That handle is already in use. Pick another.');
-      setLoading(false);
-      return;
-    }
-
-    const { error } = await supabase.from('users').insert({
-      id: user.id,
-      name: name.trim(),
-      handle: handleClean,
-      phone,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-
-    // Signals RootNavigator to switch to App
-    setProfileComplete(true);
   }
 
   return (

@@ -15,8 +15,8 @@ import { getMyProfile, getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
-import { uploadAvatar } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { updateAvatar } from '@/lib/users';
+import { signOut } from '@/lib/auth';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -72,16 +72,11 @@ export function ProfileScreen({ navigation }: Props) {
       aspect: [1, 1],
       quality: 0.8,
     });
-    if (result.canceled) return;
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (result.canceled || !myId) return;
 
     setUploading(true);
     try {
-      const url = await uploadAvatar(user.id, result.assets[0].uri);
-      const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', user.id);
-      if (error) throw error;
+      await updateAvatar(myId, result.assets[0].uri);
       queryClient.invalidateQueries({ queryKey: qk.myProfile });
     } catch {
       Alert.alert('Upload failed', 'Could not update your profile picture. Try again.');
@@ -97,7 +92,7 @@ export function ProfileScreen({ navigation }: Props) {
         text: 'Sign out',
         style: 'destructive',
         // RootNavigator's onAuthStateChange switches back to Auth automatically
-        onPress: () => supabase.auth.signOut(),
+        onPress: () => { signOut(); },
       },
     ]);
   }

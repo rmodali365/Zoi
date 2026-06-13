@@ -22,7 +22,7 @@ import {
 import { getMyProfile, getMyTrips } from '@/lib/me';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { uploadExperiencePhotos } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { getMyUserId } from '@/lib/auth';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
@@ -191,8 +191,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
       const end = parseDateInput(eEnd);
       let cover = eCover;
       if (eCover) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) [cover] = await uploadExperiencePhotos(user.id, [eCover]);
+        const userId = await getMyUserId();
+        if (userId) [cover] = await uploadExperiencePhotos(userId, [eCover]);
       }
       await updateTrip(tripId, {
         title: eTitle.trim(),

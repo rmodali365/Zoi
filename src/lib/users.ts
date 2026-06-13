@@ -1,9 +1,33 @@
 import { supabase } from '@/lib/supabase';
+import { uploadAvatar } from '@/lib/storage';
 import { User, Experience, Trip } from '@/types';
 
 // Normalize a handle to the stored form: lowercase, only [a-z0-9_].
 export function cleanHandle(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+// Whether a handle is already taken (used to pre-check before profile creation).
+export async function handleTaken(handle: string): Promise<boolean> {
+  const { data } = await supabase.from('users').select('id').eq('handle', handle).maybeSingle();
+  return !!data;
+}
+
+// Create the current user's profile row (first run, after OTP verification).
+export async function createProfile(args: {
+  id: string; name: string; handle: string; phone: string;
+}): Promise<void> {
+  const { error } = await supabase.from('users').insert(args);
+  if (error) throw error;
+}
+
+// Upload a new avatar and persist it on the user's row; returns the public URL.
+// Shared by the Profile header and Edit Profile.
+export async function updateAvatar(userId: string, localUri: string): Promise<string> {
+  const url = await uploadAvatar(userId, localUri);
+  const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', userId);
+  if (error) throw error;
+  return url;
 }
 
 export type UpdateProfileResult = { ok: true } | { ok: false; error: 'handle_taken' | 'unknown' };

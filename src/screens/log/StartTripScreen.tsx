@@ -9,9 +9,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LogStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
+import { getMyUserId } from '@/lib/auth';
 import { uploadExperiencePhotos } from '@/lib/storage';
-import { parseDateInput } from '@/lib/trips';
+import { createTrip, parseDateInput } from '@/lib/trips';
 
 type Props = {
   navigation: NativeStackNavigationProp<LogStackParamList, 'StartTrip'>;
@@ -51,8 +51,8 @@ export function StartTripScreen({ navigation }: Props) {
 
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const userId = await getMyUserId();
+    if (!userId) {
       Alert.alert('Error', 'Session expired.');
       setLoading(false);
       return;
@@ -61,35 +61,31 @@ export function StartTripScreen({ navigation }: Props) {
     let coverUrl: string | null = null;
     if (coverUri) {
       try {
-        [coverUrl] = await uploadExperiencePhotos(user.id, [coverUri]);
+        [coverUrl] = await uploadExperiencePhotos(userId, [coverUri]);
       } catch {
         Alert.alert('Cover upload failed', 'Creating the trip without a cover photo.');
       }
     }
 
-    const { data, error } = await supabase
-      .from('trips')
-      .insert({
-        user_id: user.id,
+    let tripId: string;
+    try {
+      tripId = await createTrip({
         title: title.trim(),
         destination: destination.trim() || null,
         start_date: start,
         end_date: end,
         cover_photo: coverUrl,
-      })
-      .select('id')
-      .single();
-
-    setLoading(false);
-
-    if (error || !data) {
-      Alert.alert('Error', error?.message ?? 'Could not create trip.');
+      });
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not create trip.');
       return;
+    } finally {
+      setLoading(false);
     }
 
     Alert.alert('Trip created', 'Add an experience to it now, or come back later.', [
       { text: 'Later', style: 'cancel', onPress: () => navigation.popToTop() },
-      { text: 'Add experience', onPress: () => navigation.replace('AddExperience', { tripId: data.id }) },
+      { text: 'Add experience', onPress: () => navigation.replace('AddExperience', { tripId }) },
     ]);
   }
 
