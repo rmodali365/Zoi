@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator,
+  View, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator,
   TouchableOpacity, RefreshControl,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
@@ -15,7 +15,8 @@ import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type ListTab = 'ranked' | 'trips' | 'wishlist';
 type RankedView = 'list' | 'map';
@@ -137,8 +138,8 @@ export function MyListScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Experiences</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <AppText variant="display">Experiences</AppText>
+          <AppText variant="body" color={COLORS.textSecondary} style={styles.subtitle}>{subtitle}</AppText>
         </View>
         {/* List/map toggle — only meaningful for your own ranked experiences. */}
         {tab === 'ranked' && (
@@ -176,21 +177,21 @@ export function MyListScreen({ navigation }: Props) {
           onPress={() => setTab('ranked')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, tab === 'ranked' && styles.segmentTextActive]}>Ranked</Text>
+          <AppText variant="subhead" weight="semibold" color={tab === 'ranked' ? COLORS.background : COLORS.textSecondary}>Ranked</AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segmentBtn, tab === 'trips' && styles.segmentBtnActive]}
           onPress={() => setTab('trips')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, tab === 'trips' && styles.segmentTextActive]}>Trips</Text>
+          <AppText variant="subhead" weight="semibold" color={tab === 'trips' ? COLORS.background : COLORS.textSecondary}>Trips</AppText>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.segmentBtn, tab === 'wishlist' && styles.segmentBtnActive]}
           onPress={() => setTab('wishlist')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, tab === 'wishlist' && styles.segmentTextActive]}>Want to do</Text>
+          <AppText variant="subhead" weight="semibold" color={tab === 'wishlist' ? COLORS.background : COLORS.textSecondary}>Want to do</AppText>
         </TouchableOpacity>
       </View>
 
@@ -208,8 +209,8 @@ export function MyListScreen({ navigation }: Props) {
       ) : tab === 'ranked' ? (
         items.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No experiences yet</Text>
-            <Text style={styles.emptyBody}>Log your first experience to start ranking your taste.</Text>
+            <AppText variant="headline" style={styles.emptyTitle}>No experiences yet</AppText>
+            <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>Log your first experience to start ranking your taste.</AppText>
           </View>
         ) : (
           <ScrollView
@@ -220,19 +221,19 @@ export function MyListScreen({ navigation }: Props) {
             {items.map((item, i) => (
               <View key={item.id} style={styles.row}>
                 <View style={styles.rankBadge}>
-                  <Text style={styles.rankText}>{i + 1}</Text>
+                  <AppText variant="body" weight="bold" color={COLORS.accent}>{i + 1}</AppText>
                 </View>
                 <View style={styles.info}>
-                  <Text style={styles.name} numberOfLines={1}>
+                  <AppText variant="body" weight="semibold" numberOfLines={1}>
                     {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
-                  </Text>
+                  </AppText>
                   {!!localityLabel(item) && (
-                    <Text style={styles.place} numberOfLines={1}>{localityLabel(item)}</Text>
+                    <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>{localityLabel(item)}</AppText>
                   )}
                   {item.tags.length > 0 && (
-                    <Text style={styles.tags} numberOfLines={1}>
+                    <AppText variant="footnote" numberOfLines={1} style={styles.tags}>
                       {item.tags.map((t) => TAG_LABELS[t]).join(' · ')}
-                    </Text>
+                    </AppText>
                   )}
                 </View>
                 {item.photos.length > 0 && (
@@ -245,8 +246,8 @@ export function MyListScreen({ navigation }: Props) {
       ) : tab === 'trips' ? (
         trips.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No trips yet</Text>
-            <Text style={styles.emptyBody}>Start a trip from the Log tab to group experiences into an itinerary.</Text>
+            <AppText variant="headline" style={styles.emptyTitle}>No trips yet</AppText>
+            <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>Start a trip from the Log tab to group experiences into an itinerary.</AppText>
           </View>
         ) : (
           <ScrollView
@@ -267,10 +268,10 @@ export function MyListScreen({ navigation }: Props) {
         )
       ) : saved.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Nothing saved yet</Text>
-          <Text style={styles.emptyBody}>
+          <AppText variant="headline" style={styles.emptyTitle}>Nothing saved yet</AppText>
+          <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>
             Tap the bookmark on a friend's experience to add it to your want-to-do list.
-          </Text>
+          </AppText>
         </View>
       ) : (
         <ScrollView
@@ -284,23 +285,23 @@ export function MyListScreen({ navigation }: Props) {
                 <Image source={{ uri: item.photos[0] }} style={styles.savedThumb} />
               ) : (
                 <View style={[styles.savedThumb, styles.savedThumbPlaceholder]}>
-                  <Text style={styles.savedEmoji}>{sentimentEmoji(item.sentiment)}</Text>
+                  <AppText style={styles.savedEmoji}>{sentimentEmoji(item.sentiment)}</AppText>
                 </View>
               )}
               <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>{experienceTitle(item)}</Text>
+                <AppText variant="body" weight="semibold" numberOfLines={1}>{experienceTitle(item)}</AppText>
                 {!!localityLabel(item) && (
-                  <Text style={styles.place} numberOfLines={1}>{localityLabel(item)}</Text>
+                  <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>{localityLabel(item)}</AppText>
                 )}
                 {!!item.user && (
-                  <Text style={styles.savedBy} numberOfLines={1}>
+                  <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>
                     {sentimentEmoji(item.sentiment)} from @{item.user.handle}
-                  </Text>
+                  </AppText>
                 )}
                 {item.tags.length > 0 && (
-                  <Text style={styles.tags} numberOfLines={1}>
+                  <AppText variant="footnote" numberOfLines={1} style={styles.tags}>
                     {item.tags.map((t) => TAG_LABELS[t]).join(' · ')}
-                  </Text>
+                  </AppText>
                 )}
               </View>
               <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
@@ -326,8 +327,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
   },
   headerText: { flex: 1 },
-  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 15, color: COLORS.textSecondary, marginTop: SPACING.xs },
+  subtitle: { marginTop: SPACING.xs },
   toggle: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
@@ -362,8 +362,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
   },
   segmentBtnActive: { backgroundColor: COLORS.text },
-  segmentText: { fontSize: 14, ...FONT.semibold, color: COLORS.textSecondary },
-  segmentTextActive: { color: COLORS.background },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxl },
   tripGrid: {
     flexDirection: 'row',
@@ -387,12 +385,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.accentLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  rankText: { fontSize: 16, ...FONT.bold, color: COLORS.accent },
   info: { flex: 1 },
-  name: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  place: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
-  savedBy: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
-  tags: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  place: { marginTop: 1 },
+  tags: { marginTop: 2 },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
   savedThumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
   savedThumbPlaceholder: {
@@ -401,6 +396,6 @@ const styles = StyleSheet.create({
   },
   savedEmoji: { fontSize: 22 },
   empty: { paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
-  emptyTitle: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
-  emptyBody: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { textAlign: 'center' },
+  emptyBody: { textAlign: 'center', lineHeight: 22 },
 });

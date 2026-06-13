@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
+  View, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
   ScrollView, Image, Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,7 +9,8 @@ import { RouteProp } from '@react-navigation/native';
 import { LogStackParamList, Location, Tag, Trip } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { LocationSearch } from '@/components/LocationSearch';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 type Props = {
@@ -107,18 +108,18 @@ export function AddExperienceScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.cancel}>Cancel</Text>
+          <AppText variant="body" color={COLORS.textSecondary}>Cancel</AppText>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>New experience</Text>
+        <AppText variant="body" weight="semibold">New experience</AppText>
         <TouchableOpacity onPress={handleNext} hitSlop={8}>
-          <Text style={styles.next}>Next</Text>
+          <AppText variant="body" weight="semibold" color={COLORS.accent}>Next</AppText>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Title */}
         <View style={styles.field}>
-          <Text style={styles.label}>Title</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Title</AppText>
           <TextInput
             style={styles.input}
             value={title}
@@ -127,22 +128,24 @@ export function AddExperienceScreen({ navigation, route }: Props) {
             placeholderTextColor={COLORS.textMuted}
             maxLength={60}
           />
-          <Text style={styles.hint}>Optional — defaults to the first place's name.</Text>
+          <AppText variant="caption">Optional — defaults to the first place's name.</AppText>
         </View>
 
         {/* Locations (one or more) */}
         <View style={styles.field}>
-          <Text style={styles.label}>{locations.length === 1 ? 'Location' : 'Locations'} ({locations.length})</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>
+            {locations.length === 1 ? 'Location' : 'Locations'} ({locations.length})
+          </AppText>
           {locations.map((loc) => (
             <View key={loc.place_id} style={styles.locRow}>
               <View style={styles.locInfo}>
-                <Text style={styles.locName} numberOfLines={1}>{loc.name}</Text>
+                <AppText variant="body" weight="semibold" numberOfLines={1}>{loc.name}</AppText>
                 {!!loc.formattedAddress && (
-                  <Text style={styles.locAddr} numberOfLines={1}>{loc.formattedAddress}</Text>
+                  <AppText variant="caption" numberOfLines={1}>{loc.formattedAddress}</AppText>
                 )}
               </View>
               <TouchableOpacity onPress={() => removeLocation(loc.place_id)} hitSlop={8}>
-                <Text style={styles.locRemove}>Remove</Text>
+                <AppText variant="subhead" weight="medium" color={COLORS.error}>Remove</AppText>
               </TouchableOpacity>
             </View>
           ))}
@@ -151,19 +154,19 @@ export function AddExperienceScreen({ navigation, route }: Props) {
 
         {/* Photos */}
         <View style={styles.field}>
-          <Text style={styles.label}>Photos ({photos.length}/{MAX_PHOTOS})</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Photos ({photos.length}/{MAX_PHOTOS})</AppText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoRow}>
             {photos.map((uri) => (
               <TouchableOpacity key={uri} onPress={() => removePhoto(uri)} activeOpacity={0.8}>
                 <Image source={{ uri }} style={styles.photo} />
                 <View style={styles.photoRemove}>
-                  <Text style={styles.photoRemoveText}>×</Text>
+                  <AppText style={styles.photoRemoveText}>×</AppText>
                 </View>
               </TouchableOpacity>
             ))}
             {photos.length < MAX_PHOTOS && (
               <TouchableOpacity style={styles.addPhoto} onPress={pickPhotos} activeOpacity={0.7}>
-                <Text style={styles.addPhotoText}>+</Text>
+                <AppText style={styles.addPhotoText}>+</AppText>
               </TouchableOpacity>
             )}
           </ScrollView>
@@ -171,7 +174,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
 
         {/* Quick take */}
         <View style={styles.field}>
-          <Text style={styles.label}>Quick take</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Quick take</AppText>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={quickTake}
@@ -185,7 +188,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
 
         {/* Tags */}
         <View style={styles.field}>
-          <Text style={styles.label}>Tags ({tags.length}/{MAX_TAGS})</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Tags ({tags.length}/{MAX_TAGS})</AppText>
           <View style={styles.chips}>
             {TAGS.map((tag) => {
               const selected = tags.includes(tag);
@@ -196,9 +199,9 @@ export function AddExperienceScreen({ navigation, route }: Props) {
                   onPress={() => toggleTag(tag)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                  <AppText variant="subhead" weight="medium" color={selected ? COLORS.background : COLORS.text}>
                     {TAG_LABELS[tag]}
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               );
             })}
@@ -209,21 +212,21 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         {presetTripId ? (
           // Came from "Start a trip → Add experience": the trip is locked in and shown.
           <View style={styles.field}>
-            <Text style={styles.label}>Trip</Text>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Trip</AppText>
             <View style={styles.tripBanner}>
-              <Text style={styles.tripBannerText}>🧳 Adding to {presetTrip?.title ?? 'your trip'}</Text>
+              <AppText variant="body" weight="medium">🧳 Adding to {presetTrip?.title ?? 'your trip'}</AppText>
             </View>
           </View>
         ) : trips.length > 0 ? (
           <View style={styles.field}>
-            <Text style={styles.label}>Add to a trip</Text>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Add to a trip</AppText>
             <View style={styles.chips}>
               <TouchableOpacity
                 style={[styles.chip, tripId === null && styles.chipSelected]}
                 onPress={() => setTripId(null)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.chipText, tripId === null && styles.chipTextSelected]}>None</Text>
+                <AppText variant="subhead" weight="medium" color={tripId === null ? COLORS.background : COLORS.text}>None</AppText>
               </TouchableOpacity>
               {trips.map((trip) => {
                 const selected = tripId === trip.id;
@@ -234,7 +237,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
                     onPress={() => setTripId(trip.id)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{trip.title}</Text>
+                    <AppText variant="subhead" weight="medium" color={selected ? COLORS.background : COLORS.text}>{trip.title}</AppText>
                   </TouchableOpacity>
                 );
               })}
@@ -257,12 +260,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  cancel: { fontSize: 15, color: COLORS.textSecondary },
-  topTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  next: { fontSize: 15, ...FONT.semibold, color: COLORS.accent },
   content: { padding: SPACING.xl, gap: SPACING.lg, paddingBottom: SPACING.xxl },
   field: { gap: SPACING.sm },
-  label: { fontSize: 13, ...FONT.medium, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { textTransform: 'uppercase', letterSpacing: 0.5 },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -274,16 +274,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   textArea: { minHeight: 90, textAlignVertical: 'top' },
-  hint: { fontSize: 13, color: COLORS.textMuted },
   locRow: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     borderWidth: 1.5, borderColor: COLORS.text, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md, paddingVertical: 12, backgroundColor: COLORS.surface,
   },
   locInfo: { flex: 1 },
-  locName: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  locAddr: { fontSize: 13, color: COLORS.textMuted, marginTop: 1 },
-  locRemove: { fontSize: 14, ...FONT.medium, color: COLORS.error },
   photoRow: { gap: SPACING.sm, paddingVertical: 2 },
   photo: { width: 88, height: 88, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
   photoRemove: {
@@ -305,13 +301,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2, backgroundColor: COLORS.surface,
   },
   chipSelected: { backgroundColor: COLORS.text, borderColor: COLORS.text },
-  chipText: { fontSize: 14, ...FONT.medium, color: COLORS.text },
-  chipTextSelected: { color: COLORS.background },
   tripBanner: {
     backgroundColor: COLORS.accentLight,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     paddingVertical: 12,
   },
-  tripBannerText: { fontSize: 15, ...FONT.medium, color: COLORS.text },
 });

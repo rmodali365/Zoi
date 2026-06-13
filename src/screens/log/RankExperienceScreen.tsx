@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
+  View, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -11,7 +11,8 @@ import { experienceTitle } from '@/lib/experienceDisplay';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 
 type Props = {
@@ -198,12 +199,12 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       <SafeAreaView style={styles.container}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-            <Text style={styles.cancel}>Back</Text>
+            <AppText variant="body" color={COLORS.textSecondary}>Back</AppText>
           </TouchableOpacity>
         </View>
         <View style={styles.content}>
-          <Text style={styles.title}>How was it?</Text>
-          <Text style={styles.subtitle}>{draft.title}</Text>
+          <AppText variant="display" style={styles.title}>How was it?</AppText>
+          <AppText variant="body" color={COLORS.textSecondary} style={styles.subtitle}>{draft.title}</AppText>
           <View style={styles.sentiments}>
             {SENTIMENTS.map((s) => (
               <TouchableOpacity
@@ -212,8 +213,8 @@ export function RankExperienceScreen({ navigation, route }: Props) {
                 onPress={() => handlePickSentiment(s)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.sentimentEmoji}>{SENTIMENT_EMOJI[s]}</Text>
-                <Text style={styles.sentimentLabel}>{SENTIMENT_LABELS[s]}</Text>
+                <AppText style={styles.sentimentEmoji}>{SENTIMENT_EMOJI[s]}</AppText>
+                <AppText variant="headline" weight="semibold">{SENTIMENT_LABELS[s]}</AppText>
               </TouchableOpacity>
             ))}
           </View>
@@ -229,18 +230,18 @@ export function RankExperienceScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Which did you enjoy more?</Text>
+        <AppText variant="display" style={styles.title}>Which did you enjoy more?</AppText>
         <View style={styles.compareRow}>
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(true)} activeOpacity={0.85}>
-            <Text style={styles.compareName}>{draft.title}</Text>
-            <Text style={styles.compareTag}>New</Text>
+            <AppText variant="headline" weight="semibold" style={styles.compareName}>{draft.title}</AppText>
+            <AppText variant="footnote" style={styles.compareTag}>New</AppText>
           </TouchableOpacity>
 
-          <Text style={styles.vs}>vs</Text>
+          <AppText variant="subhead" weight="medium" color={COLORS.textMuted}>vs</AppText>
 
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(false)} activeOpacity={0.85}>
-            <Text style={styles.compareName}>{opponent ? experienceTitle(opponent) : 'Experience'}</Text>
-            <Text style={styles.compareTag}>Ranked</Text>
+            <AppText variant="headline" weight="semibold" style={styles.compareName}>{opponent ? experienceTitle(opponent) : 'Experience'}</AppText>
+            <AppText variant="footnote" style={styles.compareTag}>Ranked</AppText>
           </TouchableOpacity>
         </View>
       </View>
@@ -252,10 +253,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   centered: { alignItems: 'center', justifyContent: 'center' },
   topBar: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md },
-  cancel: { fontSize: 15, color: COLORS.textSecondary },
   content: { flex: 1, paddingHorizontal: SPACING.xl, justifyContent: 'center', gap: SPACING.lg },
-  title: { fontSize: 26, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5, textAlign: 'center' },
-  subtitle: { fontSize: 16, color: COLORS.textSecondary, textAlign: 'center', marginTop: -SPACING.sm },
+  title: { textAlign: 'center' },
+  subtitle: { textAlign: 'center', marginTop: -SPACING.sm },
   sentiments: { gap: SPACING.md, marginTop: SPACING.lg },
   sentimentCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
@@ -263,14 +263,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg, padding: SPACING.lg,
   },
   sentimentEmoji: { fontSize: 28 },
-  sentimentLabel: { fontSize: 18, ...FONT.semibold, color: COLORS.text },
   compareRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   compareCard: {
     flex: 1, minHeight: 140, backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg,
     padding: SPACING.lg, alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
   },
-  compareName: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
-  compareTag: { fontSize: 12, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  vs: { fontSize: 14, ...FONT.medium, color: COLORS.textMuted },
+  compareName: { textAlign: 'center' },
+  compareTag: { textTransform: 'uppercase', letterSpacing: 0.5 },
 });

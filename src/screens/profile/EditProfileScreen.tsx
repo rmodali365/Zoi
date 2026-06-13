@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Image,
+  View, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Image,
   ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,7 +10,8 @@ import { ProfileStackParamList, User } from '@/types';
 import { cleanHandle, updateProfile } from '@/lib/users';
 import { uploadAvatar } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<ProfileStackParamList, 'EditProfile'>;
@@ -91,13 +92,13 @@ export function EditProfileScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.cancel}>Cancel</Text>
+          <AppText variant="body" color={COLORS.textSecondary}>Cancel</AppText>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>Edit profile</Text>
+        <AppText variant="body" weight="semibold">Edit profile</AppText>
         <TouchableOpacity onPress={handleSave} hitSlop={8} disabled={!canSave}>
           {saving
             ? <ActivityIndicator color={COLORS.accent} />
-            : <Text style={[styles.save, !canSave && styles.saveDisabled]}>Save</Text>}
+            : <AppText variant="body" weight="semibold" color={canSave ? COLORS.accent : COLORS.textMuted}>Save</AppText>}
         </TouchableOpacity>
       </View>
 
@@ -116,12 +117,12 @@ export function EditProfileScreen({ navigation }: Props) {
                 : <Ionicons name="camera" size={14} color={COLORS.background} />}
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarHint}>Tap to change photo</Text>
+          <AppText variant="caption">Tap to change photo</AppText>
         </View>
 
         {/* Name */}
         <View style={styles.field}>
-          <Text style={styles.label}>Name</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Name</AppText>
           <TextInput
             style={styles.input}
             value={name}
@@ -134,9 +135,9 @@ export function EditProfileScreen({ navigation }: Props) {
 
         {/* Handle */}
         <View style={styles.field}>
-          <Text style={styles.label}>Handle</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Handle</AppText>
           <View style={styles.handleRow}>
-            <Text style={styles.at}>@</Text>
+            <AppText variant="headline" weight="regular" color={COLORS.textSecondary}>@</AppText>
             <TextInput
               style={[styles.input, styles.handleInput]}
               value={handle}
@@ -149,7 +150,7 @@ export function EditProfileScreen({ navigation }: Props) {
             />
           </View>
           {handle.length > 0 && handle !== handleClean && (
-            <Text style={styles.hint}>Will be saved as @{handleClean}</Text>
+            <AppText variant="caption" style={styles.hint}>Will be saved as @{handleClean}</AppText>
           )}
         </View>
       </ScrollView>
@@ -165,10 +166,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
     borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  cancel: { fontSize: 15, color: COLORS.textSecondary },
-  topTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  save: { fontSize: 15, ...FONT.semibold, color: COLORS.accent },
-  saveDisabled: { color: COLORS.textMuted },
   content: { padding: SPACING.xl, gap: SPACING.lg },
   avatarWrap: { alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
   avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.border },
@@ -180,16 +177,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: COLORS.background,
   },
-  avatarHint: { fontSize: 13, color: COLORS.textMuted },
   field: { gap: SPACING.sm },
-  label: { fontSize: 13, ...FONT.medium, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { textTransform: 'uppercase', letterSpacing: 0.5 },
   input: {
     borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md, paddingVertical: 14, fontSize: 16,
     color: COLORS.text, backgroundColor: COLORS.surface,
   },
   handleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  at: { fontSize: 18, color: COLORS.textSecondary },
   handleInput: { flex: 1 },
-  hint: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
+  hint: { marginTop: 2 },
 });

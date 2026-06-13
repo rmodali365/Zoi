@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, Image, ActivityIndicator,
+  View, StyleSheet, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import {
   getFollowers, getFollowing, getFollowingIds, followUser, unfollowUser, UserResult,
 } from '@/lib/follows';
 import { supabase } from '@/lib/supabase';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type FollowListRoute = RouteProp<
   { FollowList: { userId: string; mode: 'followers' | 'following' } },
@@ -74,9 +76,9 @@ export function FollowListScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.back}>‹ Back</Text>
+          <AppText variant="body" weight="medium" color={COLORS.accent} style={styles.back}>‹ Back</AppText>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>{mode === 'followers' ? 'Followers' : 'Following'}</Text>
+        <AppText variant="body" weight="semibold">{mode === 'followers' ? 'Followers' : 'Following'}</AppText>
         <View style={styles.spacer} />
       </View>
 
@@ -88,9 +90,9 @@ export function FollowListScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
+            <AppText variant="body" color={COLORS.textMuted} style={styles.emptyText}>
               {mode === 'followers' ? 'No followers yet.' : 'Not following anyone yet.'}
-            </Text>
+            </AppText>
           }
           renderItem={({ item }) => {
             const isMe = item.id === meId;
@@ -101,14 +103,10 @@ export function FollowListScreen() {
                 onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
                 activeOpacity={0.7}
               >
-                {item.avatar_url ? (
-                  <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-                ) : (
-                  <View style={styles.avatar} />
-                )}
+                <Avatar uri={item.avatar_url} size={44} />
                 <View style={styles.info}>
-                  <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.handle} numberOfLines={1}>@{item.handle}</Text>
+                  <AppText variant="body" weight="semibold" numberOfLines={1}>{item.name}</AppText>
+                  <AppText variant="subhead" weight="regular" color={COLORS.textMuted} numberOfLines={1}>@{item.handle}</AppText>
                 </View>
                 {!isMe && (
                   <TouchableOpacity
@@ -117,9 +115,9 @@ export function FollowListScreen() {
                     disabled={pending.has(item.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.followText, isFollowing && styles.followingText]}>
+                    <AppText variant="subhead" weight="semibold" color={isFollowing ? COLORS.text : COLORS.background}>
                       {isFollowing ? 'Following' : 'Follow'}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -138,25 +136,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
-  back: { fontSize: 16, ...FONT.medium, color: COLORS.accent, width: 60 },
-  topTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
+  back: { width: 60 },
   spacer: { width: 60 },
   list: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.sm, flexGrow: 1 },
-  emptyText: { fontSize: 15, color: COLORS.textMuted, textAlign: 'center', marginTop: SPACING.xxl },
+  emptyText: { textAlign: 'center', marginTop: SPACING.xxl },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     paddingVertical: SPACING.sm,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.border },
   info: { flex: 1 },
-  name: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 1 },
   followBtn: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 4,
     borderRadius: RADIUS.full, backgroundColor: COLORS.text,
   },
   followingBtn: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  followText: { fontSize: 14, ...FONT.semibold, color: COLORS.background },
-  followingText: { color: COLORS.text },
 });

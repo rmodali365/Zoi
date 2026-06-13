@@ -119,6 +119,14 @@ are reintroduced, but nothing displays it. Sentiment is kept as metadata (emoji 
   (Avatar/Chip/Card/SegmentedControl) + domain components (ExperienceCard/ExperienceRow/
   TripCard/UserRow). Brand = ocean blue `COLORS.brand` for standout elements only. See
   `src/components/README.md`. Beli-inspired warm cream aesthetic; no external UI lib.
+- **Reuse the component layer (REQUIRED for new/edited screens):** every text node is an
+  `<AppText variant=…>` — never a raw `<Text>` with `fontSize`/`fontWeight`/`color` in a
+  StyleSheet (StyleSheets should only carry layout: margins, padding, letterSpacing,
+  textAlign, lineHeight, flex). Pick the `variant` by size, then override exact `weight`/
+  `color` via props. Before hand-rolling a row/card/pill/avatar/segmented control/follow
+  button, reach for the matching primitive or domain component above — don't duplicate one
+  inline. This keeps typography centralized and the UI consistent; PR #1 converted all
+  existing screens to this standard, so match it.
 - **Screens:** functional components, `StyleSheet.create` at bottom, typed nav props.
 - **RLS everywhere:** users read their own rows + rows from people they follow.
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
+  View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -9,7 +9,9 @@ import { getUserProfile } from '@/lib/users';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
-import { COLORS, SPACING, FONT, RADIUS } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 const TRIP_CARD = 140;
 
@@ -53,7 +55,7 @@ export function UserProfileScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.back}>‹ Back</Text>
+          <AppText variant="body" weight="medium" color={COLORS.accent}>‹ Back</AppText>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => shareProfile(userId, profile?.handle)} hitSlop={8}>
           <Ionicons name="share-outline" size={22} color={COLORS.text} />
@@ -63,14 +65,10 @@ export function UserProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
-          {profile?.avatar_url ? (
-            <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]} />
-          )}
+          <Avatar uri={profile?.avatar_url} size={64} />
           <View style={styles.userInfo}>
-            <Text style={styles.name}>{profile?.name ?? 'User'}</Text>
-            <Text style={styles.handle}>@{profile?.handle ?? 'handle'}</Text>
+            <AppText variant="title">{profile?.name ?? 'User'}</AppText>
+            <AppText variant="subhead" weight="regular" color={COLORS.textMuted} style={styles.handle}>@{profile?.handle ?? 'handle'}</AppText>
           </View>
         </View>
 
@@ -81,8 +79,8 @@ export function UserProfileScreen() {
             onPress={() => navigation.navigate('FollowList', { userId, mode: 'followers' })}
             activeOpacity={0.7}
           >
-            <Text style={styles.countNum}>{counts.followers}</Text>
-            <Text style={styles.countLabel}>{counts.followers === 1 ? 'follower' : 'followers'}</Text>
+            <AppText variant="body" weight="bold">{counts.followers}</AppText>
+            <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}>{counts.followers === 1 ? 'follower' : 'followers'}</AppText>
           </TouchableOpacity>
           <View style={styles.countDivider} />
           <TouchableOpacity
@@ -90,30 +88,30 @@ export function UserProfileScreen() {
             onPress={() => navigation.navigate('FollowList', { userId, mode: 'following' })}
             activeOpacity={0.7}
           >
-            <Text style={styles.countNum}>{counts.following}</Text>
-            <Text style={styles.countLabel}>following</Text>
+            <AppText variant="body" weight="bold">{counts.following}</AppText>
+            <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}>following</AppText>
           </TouchableOpacity>
         </View>
 
         {/* Experiences — simplified ranked list (read-only) */}
-        <Text style={styles.sectionTitle}>
+        <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.sectionTitle}>
           {experiences.length} {experiences.length === 1 ? 'experience' : 'experiences'}
-        </Text>
+        </AppText>
 
         {experiences.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyBody}>No experiences yet.</Text>
+            <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>No experiences yet.</AppText>
           </View>
         ) : (
           experiences.map((item, i) => (
             <View key={item.id} style={styles.row}>
-              <Text style={styles.rank}>{i + 1}</Text>
+              <AppText variant="body" weight="bold" color={COLORS.textMuted} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
-                <Text style={styles.rowName} numberOfLines={1}>
+                <AppText variant="body" weight="medium" numberOfLines={1}>
                   {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
-                </Text>
+                </AppText>
                 {!!localityLabel(item) && (
-                  <Text style={styles.rowPlace} numberOfLines={1}>{localityLabel(item)}</Text>
+                  <AppText variant="caption" numberOfLines={1} style={styles.rowPlace}>{localityLabel(item)}</AppText>
                 )}
               </View>
             </View>
@@ -121,11 +119,11 @@ export function UserProfileScreen() {
         )}
 
         {/* Trips — tap to view the itinerary (and save/copy stops from it) */}
-        <Text style={[styles.sectionTitle, styles.tripsTitle]}>Trips</Text>
+        <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={[styles.sectionTitle, styles.tripsTitle]}>Trips</AppText>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tripRow}>
           {trips.length === 0 ? (
             <View style={[styles.tripCard, styles.tripPlaceholder]}>
-              <Text style={styles.tripPlaceholderText}>No trips yet</Text>
+              <AppText variant="caption">No trips yet</AppText>
             </View>
           ) : (
             trips.map((trip) => (
@@ -139,12 +137,12 @@ export function UserProfileScreen() {
                   <Image source={{ uri: trip.cover_photo }} style={styles.tripCover} />
                 ) : (
                   <View style={[styles.tripCover, styles.tripCoverPlaceholder]}>
-                    <Text style={styles.tripEmoji}>🧳</Text>
+                    <AppText style={styles.tripEmoji}>🧳</AppText>
                   </View>
                 )}
-                <Text style={styles.tripTitle} numberOfLines={1}>{trip.title}</Text>
+                <AppText variant="subhead" weight="semibold" color={COLORS.text} numberOfLines={1}>{trip.title}</AppText>
                 {!!trip.destination && (
-                  <Text style={styles.tripDest} numberOfLines={1}>{trip.destination}</Text>
+                  <AppText variant="footnote" numberOfLines={1} style={styles.tripDest}>{trip.destination}</AppText>
                 )}
               </TouchableOpacity>
             ))
@@ -162,7 +160,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
-  back: { fontSize: 16, ...FONT.medium, color: COLORS.accent },
   scroll: { paddingBottom: SPACING.xxl },
   header: {
     flexDirection: 'row',
@@ -172,11 +169,8 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
     gap: SPACING.md,
   },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.border },
-  avatarPlaceholder: { backgroundColor: COLORS.border },
   userInfo: { flex: 1 },
-  name: { fontSize: 20, ...FONT.bold, color: COLORS.text },
-  handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 2 },
+  handle: { marginTop: 2 },
   counts: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -185,11 +179,8 @@ const styles = StyleSheet.create({
     gap: SPACING.lg,
   },
   countItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  countNum: { fontSize: 16, ...FONT.bold, color: COLORS.text },
-  countLabel: { fontSize: 14, color: COLORS.textSecondary },
   countDivider: { width: 1, height: 14, backgroundColor: COLORS.border },
   sectionTitle: {
-    fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,
     paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm,
   },
@@ -202,14 +193,12 @@ const styles = StyleSheet.create({
   },
   tripCoverPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accentLight },
   tripEmoji: { fontSize: 40 },
-  tripTitle: { fontSize: 14, ...FONT.semibold, color: COLORS.text },
-  tripDest: { fontSize: 12, color: COLORS.textMuted, marginTop: 1 },
+  tripDest: { marginTop: 1 },
   tripPlaceholder: {
     height: TRIP_CARD, borderRadius: RADIUS.md,
     borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed',
     alignItems: 'center', justifyContent: 'center',
   },
-  tripPlaceholderText: { fontSize: 13, color: COLORS.textMuted },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -219,10 +208,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
   },
-  rank: { fontSize: 15, ...FONT.bold, color: COLORS.textMuted, width: 26, textAlign: 'center' },
+  rank: { width: 26, textAlign: 'center' },
   rowInfo: { flex: 1 },
-  rowName: { fontSize: 16, ...FONT.medium, color: COLORS.text },
-  rowPlace: { fontSize: 13, color: COLORS.textMuted, marginTop: 1 },
+  rowPlace: { marginTop: 1 },
   empty: { paddingHorizontal: SPACING.xxl, paddingTop: SPACING.lg, alignItems: 'center' },
-  emptyBody: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center' },
+  emptyBody: { textAlign: 'center' },
 });
