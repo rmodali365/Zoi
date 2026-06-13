@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   button: {
-    backgroundColor: COLORS.text,
+    backgroundColor: COLORS.brand,
     borderRadius: RADIUS.md,
     paddingVertical: 16,
     alignItems: 'center',

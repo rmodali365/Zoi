@@ -16,6 +16,7 @@ import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
 import { AppText } from '@/components/ui/AppText';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type ListTab = 'ranked' | 'trips' | 'wishlist';
@@ -170,29 +171,17 @@ export function MyListScreen({ navigation }: Props) {
         )}
       </View>
 
-      {/* Ranked / Want-to-do segmented control */}
-      <View style={styles.segment}>
-        <TouchableOpacity
-          style={[styles.segmentBtn, tab === 'ranked' && styles.segmentBtnActive]}
-          onPress={() => setTab('ranked')}
-          activeOpacity={0.8}
-        >
-          <AppText variant="subhead" weight="semibold" color={tab === 'ranked' ? COLORS.background : COLORS.textSecondary}>Ranked</AppText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.segmentBtn, tab === 'trips' && styles.segmentBtnActive]}
-          onPress={() => setTab('trips')}
-          activeOpacity={0.8}
-        >
-          <AppText variant="subhead" weight="semibold" color={tab === 'trips' ? COLORS.background : COLORS.textSecondary}>Trips</AppText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.segmentBtn, tab === 'wishlist' && styles.segmentBtnActive]}
-          onPress={() => setTab('wishlist')}
-          activeOpacity={0.8}
-        >
-          <AppText variant="subhead" weight="semibold" color={tab === 'wishlist' ? COLORS.background : COLORS.textSecondary}>Want to do</AppText>
-        </TouchableOpacity>
+      {/* Ranked / Trips / Want-to-do segmented control */}
+      <View style={styles.segmentWrap}>
+        <SegmentedControl
+          segments={[
+            { value: 'ranked', label: 'Ranked' },
+            { value: 'trips', label: 'Trips' },
+            { value: 'wishlist', label: 'Want to do' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
       </View>
 
       {showMap ? (
@@ -221,7 +210,7 @@ export function MyListScreen({ navigation }: Props) {
             {items.map((item, i) => (
               <View key={item.id} style={styles.row}>
                 <View style={styles.rankBadge}>
-                  <AppText variant="body" weight="bold" color={COLORS.accent}>{i + 1}</AppText>
+                  <AppText variant="body" weight="bold" color={COLORS.brand}>{i + 1}</AppText>
                 </View>
                 <View style={styles.info}>
                   <AppText variant="body" weight="semibold" numberOfLines={1}>
@@ -305,7 +294,7 @@ export function MyListScreen({ navigation }: Props) {
                 )}
               </View>
               <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
-                <Ionicons name="bookmark" size={22} color={COLORS.accent} />
+                <Ionicons name="bookmark" size={22} color={COLORS.brand} />
               </TouchableOpacity>
             </View>
           ))}
@@ -343,25 +332,7 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: { backgroundColor: COLORS.text },
   map: { flex: 1 },
-  segment: {
-    flexDirection: 'row',
-    marginHorizontal: SPACING.xl,
-    marginBottom: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.full,
-    padding: 3,
-    gap: 3,
-  },
-  segmentBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 7,
-    borderRadius: RADIUS.full,
-  },
-  segmentBtnActive: { backgroundColor: COLORS.text },
+  segmentWrap: { marginHorizontal: SPACING.xl, marginBottom: SPACING.md },
   scroll: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxl },
   tripGrid: {
     flexDirection: 'row',
@@ -382,7 +353,7 @@ const styles = StyleSheet.create({
   },
   rankBadge: {
     width: 36, height: 36, borderRadius: RADIUS.full,
-    backgroundColor: COLORS.accentLight,
+    backgroundColor: COLORS.brandLight,
     alignItems: 'center', justifyContent: 'center',
   },
   info: { flex: 1 },

@@ -55,7 +55,7 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
             <Ionicons
               name={saved ? 'bookmark' : 'bookmark-outline'}
               size={22}
-              color={saved ? COLORS.accent : COLORS.textSecondary}
+              color={saved ? COLORS.brand : COLORS.textSecondary}
             />
           </TouchableOpacity>
         )}
@@ -75,7 +75,7 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
           <AppText variant="subhead" color={COLORS.text}>
             {sentimentEmoji(item.sentiment)} {sentimentLabel(item.sentiment)}
           </AppText>
-          <AppText variant="subhead" weight="regular"> · ranked #{item.rankPosition} of {item.authorTotal}</AppText>
+          <AppText variant="subhead" weight="semibold" color={COLORS.brand}> · ranked #{item.rankPosition} of {item.authorTotal}</AppText>
         </View>
 
         {!!item.quick_take && (

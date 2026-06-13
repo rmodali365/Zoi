@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   followBtn: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 4,
-    borderRadius: RADIUS.full, backgroundColor: COLORS.text,
+    borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
   },
   followingBtn: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
 });
