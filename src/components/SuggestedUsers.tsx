@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   name: { maxWidth: CARD - SPACING.md },
   btn: {
     marginTop: 6,
-    backgroundColor: COLORS.text,
+    backgroundColor: COLORS.brand,
     borderRadius: RADIUS.sm,
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,

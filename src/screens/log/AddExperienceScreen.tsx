@@ -11,6 +11,7 @@ import { LogStackParamList, Location, Tag } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
+import { Chip } from '@/components/ui/Chip';
 import { getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -179,21 +180,14 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         <View style={styles.field}>
           <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Tags ({tags.length}/{MAX_TAGS})</AppText>
           <View style={styles.chips}>
-            {TAGS.map((tag) => {
-              const selected = tags.includes(tag);
-              return (
-                <TouchableOpacity
-                  key={tag}
-                  style={[styles.chip, selected && styles.chipSelected]}
-                  onPress={() => toggleTag(tag)}
-                  activeOpacity={0.7}
-                >
-                  <AppText variant="subhead" weight="medium" color={selected ? COLORS.background : COLORS.text}>
-                    {TAG_LABELS[tag]}
-                  </AppText>
-                </TouchableOpacity>
-              );
-            })}
+            {TAGS.map((tag) => (
+              <Chip
+                key={tag}
+                label={TAG_LABELS[tag]}
+                selected={tags.includes(tag)}
+                onPress={() => toggleTag(tag)}
+              />
+            ))}
           </View>
         </View>
 
@@ -210,26 +204,15 @@ export function AddExperienceScreen({ navigation, route }: Props) {
           <View style={styles.field}>
             <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Add to a trip</AppText>
             <View style={styles.chips}>
-              <TouchableOpacity
-                style={[styles.chip, tripId === null && styles.chipSelected]}
-                onPress={() => setTripId(null)}
-                activeOpacity={0.7}
-              >
-                <AppText variant="subhead" weight="medium" color={tripId === null ? COLORS.background : COLORS.text}>None</AppText>
-              </TouchableOpacity>
-              {trips.map((trip) => {
-                const selected = tripId === trip.id;
-                return (
-                  <TouchableOpacity
-                    key={trip.id}
-                    style={[styles.chip, selected && styles.chipSelected]}
-                    onPress={() => setTripId(trip.id)}
-                    activeOpacity={0.7}
-                  >
-                    <AppText variant="subhead" weight="medium" color={selected ? COLORS.background : COLORS.text}>{trip.title}</AppText>
-                  </TouchableOpacity>
-                );
-              })}
+              <Chip label="None" selected={tripId === null} onPress={() => setTripId(null)} />
+              {trips.map((trip) => (
+                <Chip
+                  key={trip.id}
+                  label={trip.title}
+                  selected={tripId === trip.id}
+                  onPress={() => setTripId(trip.id)}
+                />
+              ))}
             </View>
           </View>
         ) : null}
@@ -285,11 +268,6 @@ const styles = StyleSheet.create({
   },
   addPhotoText: { fontSize: 32, color: COLORS.textMuted, fontWeight: '300' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  chip: {
-    borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2, backgroundColor: COLORS.surface,
-  },
-  chipSelected: { backgroundColor: COLORS.text, borderColor: COLORS.text },
   tripBanner: {
     backgroundColor: COLORS.accentLight,
     borderRadius: RADIUS.md,

@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   handleInput: { flex: 1 },
   handleHint: { marginTop: 2 },
   button: {
-    backgroundColor: COLORS.text,
+    backgroundColor: COLORS.brand,
     borderRadius: RADIUS.md,
     paddingVertical: 16,
     alignItems: 'center',

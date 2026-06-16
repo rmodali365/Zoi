@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   emptyBody: { textAlign: 'center', lineHeight: 22 },
   cta: {
     marginTop: SPACING.md,
-    backgroundColor: COLORS.text,
+    backgroundColor: COLORS.brand,
     borderRadius: RADIUS.md,
     paddingVertical: 12,
     paddingHorizontal: SPACING.xl,

@@ -197,7 +197,7 @@ export function ProfileScreen({ navigation }: Props) {
         ) : (
           experiences.map((item, i) => (
             <View key={item.id} style={styles.row}>
-              <AppText variant="body" weight="bold" color={COLORS.textMuted} style={styles.rank}>{i + 1}</AppText>
+              <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
                   {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     width: TRIP_CARD, height: TRIP_CARD, borderRadius: RADIUS.md,
     backgroundColor: COLORS.border, marginBottom: SPACING.xs,
   },
-  tripCoverPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.accentLight },
+  tripCoverPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.brandLight },
   tripEmoji: { fontSize: 40 },
   tripDest: { marginTop: 1 },
   tripPlaceholder: {
