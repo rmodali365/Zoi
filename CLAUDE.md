@@ -127,6 +127,15 @@ are reintroduced, but nothing displays it. Sentiment is kept as metadata (emoji 
   button, reach for the matching primitive or domain component above — don't duplicate one
   inline. This keeps typography centralized and the UI consistent; PR #1 converted all
   existing screens to this standard, so match it.
+- **Data layer (REQUIRED for new/edited screens):** screens never touch `supabase`
+  directly — all reads/writes go through a function in `src/lib/` (`auth`, `me`, `users`,
+  `trips`, `experiences`, `follows`, `saves`, `feed`, `storage`). Screens stay thin: they
+  call lib functions and own only UI state + navigation. For cacheable server reads use
+  React Query (`useQuery`) keyed by the centralized keys in `src/lib/queryKeys.ts` (`qk`);
+  mutate with `useMutation`/lib calls and `invalidateQueries(qk.…)` so caches can't drift.
+  Auth/OTP and one-shot writes can be plain `await lib.fn()` (not every call needs a query).
+  Need the current user id? `getMyUserId()` from `@/lib/auth` — don't call
+  `supabase.auth.getUser()` in a screen. PR #2 moved every screen onto this pattern; match it.
 - **Screens:** functional components, `StyleSheet.create` at bottom, typed nav props.
 - **RLS everywhere:** users read their own rows + rows from people they follow.
 

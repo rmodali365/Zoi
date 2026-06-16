@@ -8,12 +8,12 @@ import { LogStackParamList, Experience, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { experienceTitle } from '@/lib/experienceDisplay';
-import { uploadExperiencePhotos } from '@/lib/storage';
+import { getMyUserId } from '@/lib/auth';
+import { getRankedExperiences, insertRankedExperience, graduatePlannedStop } from '@/lib/experiences';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<LogStackParamList, 'RankExperience'>;
@@ -34,22 +34,15 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     setSentiment(s);
     setPhase('saving');
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const userId = await getMyUserId();
+    if (!userId) {
       Alert.alert('Error', 'Session expired.');
       return;
     }
 
     // Load the FULL ranked list — ranking is one overall list per user now.
     // Planned trip stops are excluded; only ranked experiences are comparison candidates.
-    const { data } = await supabase
-      .from('experiences')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'ranked')
-      .order('rank_key', { ascending: true });
-
-    const existing = (data ?? []) as Experience[];
+    const existing = await getRankedExperiences(userId);
 
     if (existing.length === 0) {
       // Very first experience — auto #1.
@@ -102,86 +95,49 @@ export function RankExperienceScreen({ navigation, route }: Props) {
   }
 
   async function save(s: Sentiment, rankKey: string, pos: number, total: number) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await getMyUserId();
+    if (!userId) return;
 
-    // Graduating an existing planned stop: flip it to ranked in place, keeping its
-    // trip membership, position, place, photos and note untouched.
-    if (experienceId) {
-      const { error: updateError } = await supabase
-        .from('experiences')
-        .update({ status: 'ranked', sentiment: s, rank_key: rankKey })
-        .eq('id', experienceId);
-      if (updateError) {
-        Alert.alert('Error', updateError.message);
-        setPhase('comparing');
-        return;
-      }
+    // A new experience (or a graduated stop) affects My List + Profile (and trip averages).
+    const invalidate = () => {
       queryClient.invalidateQueries({ queryKey: qk.myExperiences });
       queryClient.invalidateQueries({ queryKey: qk.myTrips });
       if (draft.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(draft.trip_id) });
-      Alert.alert('Ranked!', `${draft.title} landed at #${pos + 1} of ${total}.`,
-        [{ text: 'Done', onPress: () => navigation.popToTop() }]);
-      return;
-    }
+    };
 
-    // Upload photos to Storage first; save without them if upload fails.
-    let photoUrls: string[] = [];
     try {
-      photoUrls = await uploadExperiencePhotos(user.id, draft.photos);
-    } catch {
-      if (draft.photos.length > 0) {
-        Alert.alert('Photo upload failed', 'Saving your experience without photos.');
+      if (experienceId) {
+        // Graduating an existing planned stop: flip it to ranked in place, keeping its
+        // trip membership, position, place, photos and note untouched.
+        await graduatePlannedStop(experienceId, s, rankKey);
+        invalidate();
+        Alert.alert('Ranked!', `${draft.title} landed at #${pos + 1} of ${total}.`,
+          [{ text: 'Done', onPress: () => navigation.popToTop() }]);
+        return;
       }
-    }
 
-    // When logging into a trip, append this stop to the end of its itinerary.
-    let tripPosition: string | null = null;
-    if (draft.trip_id) {
-      const { data: rows } = await supabase
-        .from('experiences')
-        .select('trip_position, rank_key')
-        .eq('trip_id', draft.trip_id);
-      const ps = (rows ?? [])
-        .map((r) => r.trip_position ?? r.rank_key)
-        .filter((p): p is string => !!p)
-        .sort();
-      tripPosition = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
-    }
-
-    const { error } = await supabase.from('experiences').insert({
-      user_id: user.id,
-      sentiment: s,
-      trip_id: draft.trip_id,
-      trip_position: tripPosition,
-      title: draft.title,
-      locations: draft.locations,
-      // Representative location (= locations[0]) for the map pin / legacy reads.
-      location: draft.locations[0] ?? null,
-      tags: draft.tags,
-      photos: photoUrls,
-      quick_take: draft.quick_take,
-      rank_key: rankKey,
-    });
-
-    if (error) {
-      Alert.alert('Error', error.message);
+      await insertRankedExperience({
+        userId,
+        draft,
+        sentiment: s,
+        rankKey,
+        onPhotoError: () =>
+          Alert.alert('Photo upload failed', 'Saving your experience without photos.'),
+      });
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not save.');
       setPhase('comparing');
       return;
     }
 
-    // New experience affects the user's My List + Profile (and trip averages).
-    queryClient.invalidateQueries({ queryKey: qk.myExperiences });
-    queryClient.invalidateQueries({ queryKey: qk.myTrips });
-    if (draft.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(draft.trip_id) });
+    invalidate();
 
-    const place = draft.title;
     const isFirst = total === 1;
     Alert.alert(
       isFirst ? '🎉 First one!' : 'Ranked!',
       isFirst
-        ? `${place} is your #1. You started your list!`
-        : `${place} landed at #${pos + 1} of ${total}`,
+        ? `${draft.title} is your #1. You started your list!`
+        : `${draft.title} landed at #${pos + 1} of ${total}`,
       [{ text: 'Done', onPress: () => navigation.popToTop() }],
     );
   }

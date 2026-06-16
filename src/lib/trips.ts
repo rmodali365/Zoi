@@ -32,6 +32,26 @@ export function parseDateInput(s: string): string | null {
   return t;
 }
 
+// Create a new trip container for the current user; returns its id. Cover photo
+// (if any) should already be uploaded to a public URL by the caller.
+export async function createTrip(fields: {
+  title: string;
+  destination: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  cover_photo: string | null;
+}): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+  const { data, error } = await supabase
+    .from('trips')
+    .insert({ user_id: user.id, ...fields })
+    .select('id')
+    .single();
+  if (error || !data) throw error ?? new Error('Could not create trip.');
+  return data.id;
+}
+
 // Update a trip's editable fields (owner only, enforced by RLS).
 export async function updateTrip(
   tripId: string,

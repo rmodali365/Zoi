@@ -6,7 +6,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import {
   getFollowers, getFollowing, getFollowingIds, followUser, unfollowUser, UserResult,
 } from '@/lib/follows';
-import { supabase } from '@/lib/supabase';
+import { getMyUserId } from '@/lib/auth';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -32,13 +32,13 @@ export function FollowListScreen() {
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const [list, followingIds] = await Promise.all([
+      const [myId, list, followingIds] = await Promise.all([
+        getMyUserId(),
         mode === 'followers' ? getFollowers(userId) : getFollowing(userId),
         getFollowingIds(),
       ]);
       if (!active) return;
-      setMeId(user?.id ?? null);
+      setMeId(myId);
       setUsers(list);
       setFollowing(followingIds);
       setLoading(false);

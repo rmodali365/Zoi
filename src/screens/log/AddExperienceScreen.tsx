@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
   ScrollView, Image, Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useQuery } from '@tanstack/react-query';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { LogStackParamList, Location, Tag, Trip } from '@/types';
+import { LogStackParamList, Location, Tag } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
+import { getMyTrips } from '@/lib/me';
+import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
-import { supabase } from '@/lib/supabase';
 
 type Props = {
   navigation: NativeStackNavigationProp<LogStackParamList, 'AddExperience'>;
@@ -30,22 +32,9 @@ export function AddExperienceScreen({ navigation, route }: Props) {
   const [quickTake, setQuickTake] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [tripId, setTripId] = useState<string | null>(presetTripId);
-  const [trips, setTrips] = useState<Trip[]>([]);
 
-  useEffect(() => {
-    loadTrips();
-  }, []);
-
-  async function loadTrips() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase
-      .from('trips')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    if (data) setTrips(data as Trip[]);
-  }
+  // Trips the experience can be filed under — shared cache with My List / Profile.
+  const { data: trips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
 
   async function pickPhotos() {
     if (photos.length >= MAX_PHOTOS) return;

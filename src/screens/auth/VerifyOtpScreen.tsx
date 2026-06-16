@@ -7,7 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
-import { supabase } from '@/lib/supabase';
+import { verifyOtp } from '@/lib/auth';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -22,29 +22,17 @@ export function VerifyOtpScreen({ navigation, route }: Props) {
 
   async function handleVerify() {
     setLoading(true);
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: 'sms',
-    });
-    setLoading(false);
-
-    if (error) {
+    let hasProfile: boolean;
+    try {
+      ({ hasProfile } = await verifyOtp(phone, otp));
+    } catch {
       Alert.alert('Invalid code', 'Please check the code and try again.');
       return;
+    } finally {
+      setLoading(false);
     }
 
-    // Check if this user already has a profile row
-    const userId = data.user?.id;
-    if (!userId) return;
-
-    const { data: profile } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (!profile) {
+    if (!hasProfile) {
       // New user — collect their name and handle
       navigation.navigate('SetupProfile', { phone });
     }

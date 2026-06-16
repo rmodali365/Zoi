@@ -6,7 +6,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
-import { supabase } from '@/lib/supabase';
+import { sendOtp } from '@/lib/auth';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -20,12 +20,13 @@ export function PhoneAuthScreen({ navigation }: Props) {
   async function handleSendOtp() {
     const formatted = phone.startsWith('+') ? phone : `+1${phone.replace(/\D/g, '')}`;
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ phone: formatted });
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error.message);
+    try {
+      await sendOtp(formatted);
+    } catch (e) {
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not send the code.');
       return;
+    } finally {
+      setLoading(false);
     }
     navigation.navigate('VerifyOtp', { phone: formatted });
   }

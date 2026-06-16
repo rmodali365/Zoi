@@ -1,15 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Image,
   ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ProfileStackParamList, User } from '@/types';
-import { cleanHandle, updateProfile } from '@/lib/users';
-import { uploadAvatar } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { ProfileStackParamList } from '@/types';
+import { cleanHandle, updateProfile, updateAvatar } from '@/lib/users';
+import { getMyProfile } from '@/lib/me';
+import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -18,31 +19,27 @@ type Props = {
 };
 
 export function EditProfileScreen({ navigation }: Props) {
-  const [userId, setUserId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading } = useQuery({ queryKey: qk.myProfile, queryFn: getMyProfile });
+
   const [name, setName] = useState('');
   const [handle, setHandle] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Seed the form once from the cached profile (don't clobber in-progress edits on refetch).
+  const seeded = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      const { data } = await supabase.from('users').select('*').eq('id', user.id).maybeSingle();
-      if (!active) return;
-      const prof = data as User | null;
-      setUserId(user.id);
-      setName(prof?.name ?? '');
-      setHandle(prof?.handle ?? '');
-      setAvatarUrl(prof?.avatar_url ?? null);
-      setLoading(false);
-    })().catch(() => active && setLoading(false));
-    return () => { active = false; };
-  }, []);
+    if (profile && !seeded.current) {
+      seeded.current = true;
+      setName(profile.name);
+      setHandle(profile.handle);
+      setAvatarUrl(profile.avatar_url);
+    }
+  }, [profile]);
 
+  const userId = profile?.id ?? null;
   const handleClean = cleanHandle(handle);
   const canSave = name.trim().length > 0 && handleClean.length >= 2 && !saving;
 
@@ -53,10 +50,9 @@ export function EditProfileScreen({ navigation }: Props) {
     if (result.canceled || !userId) return;
     setUploading(true);
     try {
-      const url = await uploadAvatar(userId, result.assets[0].uri);
-      const { error } = await supabase.from('users').update({ avatar_url: url }).eq('id', userId);
-      if (error) throw error;
+      const url = await updateAvatar(userId, result.assets[0].uri);
       setAvatarUrl(url);
+      queryClient.invalidateQueries({ queryKey: qk.myProfile });
     } catch {
       Alert.alert('Upload failed', 'Could not update your profile picture. Try again.');
     } finally {
@@ -70,6 +66,7 @@ export function EditProfileScreen({ navigation }: Props) {
     const result = await updateProfile(userId, { name: name.trim(), handle: handleClean });
     setSaving(false);
     if (result.ok) {
+      queryClient.invalidateQueries({ queryKey: qk.myProfile });
       navigation.goBack();
       return;
     }
@@ -80,7 +77,7 @@ export function EditProfileScreen({ navigation }: Props) {
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]}>
         <ActivityIndicator color={COLORS.text} />
