@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
-  ActivityIndicator, FlatList, Image,
+  View, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
+  ActivityIndicator, FlatList,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedStackParamList } from '@/types';
 import { searchUsers, getFollowingIds, followUser, unfollowUser, UserResult } from '@/lib/follows';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<FeedStackParamList, 'FindPeople'>;
@@ -81,9 +83,9 @@ export function FindPeopleScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.back}>Done</Text>
+          <AppText variant="body" weight="medium" color={COLORS.accent} style={styles.back}>Done</AppText>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>Find friends</Text>
+        <AppText variant="body" weight="semibold">Find friends</AppText>
         <View style={styles.spacer} />
       </View>
 
@@ -108,7 +110,7 @@ export function FindPeopleScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           query.trim().length > 0 && !loading ? (
-            <Text style={styles.emptyText}>No one found for “{query.trim()}”.</Text>
+            <AppText variant="body" color={COLORS.textMuted} style={styles.emptyText}>No one found for “{query.trim()}”.</AppText>
           ) : null
         }
         renderItem={({ item }) => {
@@ -120,14 +122,10 @@ export function FindPeopleScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
               activeOpacity={0.7}
             >
-              {item.avatar_url ? (
-                <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatar} />
-              )}
+              <Avatar uri={item.avatar_url} size={44} />
               <View style={styles.info}>
-                <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.handle} numberOfLines={1}>@{item.handle}</Text>
+                <AppText variant="body" weight="semibold" numberOfLines={1}>{item.name}</AppText>
+                <AppText variant="subhead" weight="regular" color={COLORS.textMuted} numberOfLines={1}>@{item.handle}</AppText>
               </View>
               <TouchableOpacity
                 style={[styles.followBtn, isFollowing && styles.followingBtn]}
@@ -135,9 +133,9 @@ export function FindPeopleScreen({ navigation }: Props) {
                 disabled={isPending}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.followText, isFollowing && styles.followingText]}>
+                <AppText variant="subhead" weight="semibold" color={isFollowing ? COLORS.text : COLORS.background}>
                   {isFollowing ? 'Following' : 'Follow'}
-                </Text>
+                </AppText>
               </TouchableOpacity>
             </TouchableOpacity>
           );
@@ -153,8 +151,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
-  back: { fontSize: 15, ...FONT.medium, color: COLORS.accent, width: 50 },
-  topTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
+  back: { width: 50 },
   spacer: { width: 50 },
   searchWrap: { paddingHorizontal: SPACING.xl, paddingBottom: SPACING.sm },
   input: {
@@ -164,21 +161,16 @@ const styles = StyleSheet.create({
   },
   loading: { position: 'absolute', right: SPACING.xl + SPACING.md, top: 14 },
   list: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.sm },
-  emptyText: { fontSize: 15, color: COLORS.textMuted, textAlign: 'center', marginTop: SPACING.xl },
+  emptyText: { textAlign: 'center', marginTop: SPACING.xl },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     paddingVertical: SPACING.sm,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.border },
   info: { flex: 1 },
-  name: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  handle: { fontSize: 14, color: COLORS.textMuted, marginTop: 1 },
   followBtn: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 4,
     borderRadius: RADIUS.full, backgroundColor: COLORS.text,
   },
   followingBtn: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  followText: { fontSize: 14, ...FONT.semibold, color: COLORS.background },
-  followingText: { color: COLORS.text },
 });

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView,
+  View, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, ScrollView,
   Image, ActivityIndicator, Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LogStackParamList } from '@/types';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { parseDateInput } from '@/lib/trips';
@@ -96,11 +97,13 @@ export function StartTripScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.cancel}>Cancel</Text>
+          <AppText variant="body" color={COLORS.textSecondary}>Cancel</AppText>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>New trip</Text>
+        <AppText variant="body" weight="semibold">New trip</AppText>
         <TouchableOpacity onPress={handleCreate} hitSlop={8} disabled={loading}>
-          {loading ? <ActivityIndicator color={COLORS.accent} /> : <Text style={styles.create}>Create</Text>}
+          {loading
+            ? <ActivityIndicator color={COLORS.accent} />
+            : <AppText variant="body" weight="semibold" color={COLORS.accent}>Create</AppText>}
         </TouchableOpacity>
       </View>
 
@@ -111,13 +114,13 @@ export function StartTripScreen({ navigation }: Props) {
           ) : (
             <View style={[styles.cover, styles.coverPlaceholder]}>
               <Ionicons name="image-outline" size={28} color={COLORS.textMuted} />
-              <Text style={styles.coverHint}>Add a cover photo (optional)</Text>
+              <AppText variant="caption">Add a cover photo (optional)</AppText>
             </View>
           )}
         </TouchableOpacity>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Trip name</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Trip name</AppText>
           <TextInput
             style={styles.input}
             value={title}
@@ -128,7 +131,7 @@ export function StartTripScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Destination (optional)</Text>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Destination (optional)</AppText>
           <TextInput
             style={styles.input}
             value={destination}
@@ -141,7 +144,7 @@ export function StartTripScreen({ navigation }: Props) {
 
         <View style={styles.dateRow}>
           <View style={[styles.field, styles.dateField]}>
-            <Text style={styles.label}>Start (optional)</Text>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Start (optional)</AppText>
             <TextInput
               style={styles.input}
               value={startDate}
@@ -153,7 +156,7 @@ export function StartTripScreen({ navigation }: Props) {
             />
           </View>
           <View style={[styles.field, styles.dateField]}>
-            <Text style={styles.label}>End (optional)</Text>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>End (optional)</AppText>
             <TextInput
               style={styles.input}
               value={endDate}
@@ -166,10 +169,10 @@ export function StartTripScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <Text style={styles.hint}>
+        <AppText variant="subhead" weight="regular" color={COLORS.textMuted} style={styles.hint}>
           A trip is a container for an itinerary. Add planned stops or log experiences into it —
           each experience still gets ranked on its own.
-        </Text>
+        </AppText>
       </ScrollView>
     </SafeAreaView>
   );
@@ -186,16 +189,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  cancel: { fontSize: 15, color: COLORS.textSecondary },
-  topTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  create: { fontSize: 15, ...FONT.semibold, color: COLORS.accent },
   content: { padding: SPACING.xl, gap: SPACING.lg },
   coverPicker: { borderRadius: RADIUS.lg, overflow: 'hidden' },
   cover: { width: '100%', height: 160, borderRadius: RADIUS.lg, backgroundColor: COLORS.border },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
-  coverHint: { fontSize: 13, color: COLORS.textMuted },
   field: { gap: SPACING.sm },
-  label: { fontSize: 13, ...FONT.medium, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { textTransform: 'uppercase', letterSpacing: 0.5 },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -208,5 +207,5 @@ const styles = StyleSheet.create({
   },
   dateRow: { flexDirection: 'row', gap: SPACING.md },
   dateField: { flex: 1 },
-  hint: { fontSize: 14, color: COLORS.textMuted, lineHeight: 20 },
+  hint: { lineHeight: 20 },
 });

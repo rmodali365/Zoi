@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { getSuggestedUsers, followUser, UserResult } from '@/lib/follows';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 const CARD = 140;
 
@@ -47,7 +49,9 @@ export function SuggestedUsers({ onPressUser }: { onPressUser?: (id: string) => 
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>Suggested for you</Text>
+      <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.title}>
+        Suggested for you
+      </AppText>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -65,22 +69,18 @@ export function SuggestedUsers({ onPressUser }: { onPressUser?: (id: string) => 
                   disabled={!onPressUser}
                   activeOpacity={0.8}
                 >
-                  {u.avatar_url ? (
-                    <Image source={{ uri: u.avatar_url }} style={styles.avatar} />
-                  ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]} />
-                  )}
-                  <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
-                  <Text style={styles.handle} numberOfLines={1}>@{u.handle}</Text>
+                  <Avatar uri={u.avatar_url} size={52} />
+                  <AppText variant="subhead" weight="semibold" color={COLORS.text} numberOfLines={1} style={styles.name}>{u.name}</AppText>
+                  <AppText variant="footnote" numberOfLines={1} style={styles.name}>@{u.handle}</AppText>
                   <TouchableOpacity
                     style={[styles.btn, isFollowed && styles.btnDone]}
                     onPress={() => follow(u.id)}
                     disabled={isFollowed || pending.has(u.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.btnText, isFollowed && styles.btnDoneText]}>
+                    <AppText variant="caption" weight="semibold" color={isFollowed ? COLORS.text : COLORS.background}>
                       {isFollowed ? 'Following' : 'Follow'}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 </TouchableOpacity>
               );
@@ -93,7 +93,6 @@ export function SuggestedUsers({ onPressUser }: { onPressUser?: (id: string) => 
 const styles = StyleSheet.create({
   wrap: { marginBottom: SPACING.lg },
   title: {
-    fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5,
     paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm,
   },
@@ -111,10 +110,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   skeleton: { backgroundColor: COLORS.accentLight, borderColor: COLORS.accentLight },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.border, marginBottom: 2 },
-  avatarPlaceholder: { backgroundColor: COLORS.border },
-  name: { fontSize: 14, ...FONT.semibold, color: COLORS.text, maxWidth: CARD - SPACING.md },
-  handle: { fontSize: 12, color: COLORS.textMuted, maxWidth: CARD - SPACING.md },
+  name: { maxWidth: CARD - SPACING.md },
   btn: {
     marginTop: 6,
     backgroundColor: COLORS.text,
@@ -123,6 +119,4 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   btnDone: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
-  btnText: { fontSize: 13, ...FONT.semibold, color: COLORS.background },
-  btnDoneText: { color: COLORS.text },
 });

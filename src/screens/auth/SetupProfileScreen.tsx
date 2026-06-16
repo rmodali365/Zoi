@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  View, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '@/types';
+import { AppText } from '@/components/ui/AppText';
 import { supabase } from '@/lib/supabase';
 import { useAuthContext } from '@/contexts/AuthContext';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'SetupProfile'>;
@@ -72,12 +73,14 @@ export function SetupProfileScreen({ route }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Set up your profile</Text>
-          <Text style={styles.subtitle}>This is how friends will find and recognize you.</Text>
+          <AppText variant="display">Set up your profile</AppText>
+          <AppText variant="body" color={COLORS.textSecondary} style={styles.subtitle}>
+            This is how friends will find and recognize you.
+          </AppText>
 
           <View style={styles.fields}>
             <View style={styles.field}>
-              <Text style={styles.label}>Your name</Text>
+              <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Your name</AppText>
               <TextInput
                 style={styles.input}
                 value={name}
@@ -91,9 +94,9 @@ export function SetupProfileScreen({ route }: Props) {
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Handle</Text>
+              <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Handle</AppText>
               <View style={styles.handleRow}>
-                <Text style={styles.atSign}>@</Text>
+                <AppText variant="headline" weight="regular" color={COLORS.textSecondary} style={styles.atSign}>@</AppText>
                 <TextInput
                   style={[styles.input, styles.handleInput]}
                   value={handle}
@@ -106,7 +109,7 @@ export function SetupProfileScreen({ route }: Props) {
                 />
               </View>
               {handle.length > 0 && handle !== handleClean && (
-                <Text style={styles.handleHint}>Will be saved as @{handleClean}</Text>
+                <AppText variant="caption" style={styles.handleHint}>Will be saved as @{handleClean}</AppText>
               )}
             </View>
           </View>
@@ -120,7 +123,7 @@ export function SetupProfileScreen({ route }: Props) {
             {loading ? (
               <ActivityIndicator color={COLORS.background} />
             ) : (
-              <Text style={styles.buttonText}>Continue</Text>
+              <AppText variant="body" weight="semibold" color={COLORS.background}>Continue</AppText>
             )}
           </TouchableOpacity>
         </View>
@@ -133,11 +136,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   inner: { flex: 1, paddingHorizontal: SPACING.xl },
   content: { flex: 1, justifyContent: 'center', gap: SPACING.lg },
-  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 16, color: COLORS.textSecondary, lineHeight: 24, marginTop: -SPACING.sm },
+  subtitle: { lineHeight: 24, marginTop: -SPACING.sm },
   fields: { gap: SPACING.md },
   field: { gap: SPACING.xs },
-  label: { fontSize: 13, ...FONT.medium, color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { textTransform: 'uppercase', letterSpacing: 0.5 },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.border,
@@ -149,9 +151,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   handleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  atSign: { fontSize: 17, color: COLORS.textSecondary, paddingBottom: 1 },
+  atSign: { paddingBottom: 1 },
   handleInput: { flex: 1 },
-  handleHint: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
+  handleHint: { marginTop: 2 },
   button: {
     backgroundColor: COLORS.text,
     borderRadius: RADIUS.md,
@@ -160,5 +162,4 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   buttonDisabled: { opacity: 0.4 },
-  buttonText: { color: COLORS.background, fontSize: 16, ...FONT.semibold },
 });

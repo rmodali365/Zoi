@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, TextInput, Text, TouchableOpacity, ActivityIndicator, StyleSheet,
+  View, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet,
 } from 'react-native';
 import { Location } from '@/types';
 import { autocompletePlaces, getPlaceDetails, PlaceSuggestion } from '@/lib/places';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 // Places session token groups autocomplete keystrokes + the final details call for billing.
 function newSessionToken(): string {
@@ -70,13 +71,13 @@ export function LocationSearch({ value, onChange }: Props) {
     return (
       <View style={styles.selected}>
         <View style={styles.selectedInfo}>
-          <Text style={styles.selectedName}>{value.name}</Text>
+          <AppText variant="body" weight="semibold">{value.name}</AppText>
           {!!value.formattedAddress && (
-            <Text style={styles.selectedAddr} numberOfLines={1}>{value.formattedAddress}</Text>
+            <AppText variant="caption" numberOfLines={1} style={styles.selectedAddr}>{value.formattedAddress}</AppText>
           )}
         </View>
         <TouchableOpacity onPress={handleClear} hitSlop={8}>
-          <Text style={styles.change}>Change</Text>
+          <AppText variant="subhead" weight="medium" color={COLORS.accent}>Change</AppText>
         </TouchableOpacity>
       </View>
     );
@@ -97,8 +98,8 @@ export function LocationSearch({ value, onChange }: Props) {
         <View style={styles.dropdown}>
           {suggestions.map((s) => (
             <TouchableOpacity key={s.placeId} style={styles.row} onPress={() => handleSelect(s)} activeOpacity={0.7}>
-              <Text style={styles.rowPrimary}>{s.primary}</Text>
-              {!!s.secondary && <Text style={styles.rowSecondary} numberOfLines={1}>{s.secondary}</Text>}
+              <AppText variant="body" weight="medium">{s.primary}</AppText>
+              {!!s.secondary && <AppText variant="caption" numberOfLines={1} style={styles.rowSecondary}>{s.secondary}</AppText>}
             </TouchableOpacity>
           ))}
         </View>
@@ -133,8 +134,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
   },
-  rowPrimary: { fontSize: 15, ...FONT.medium, color: COLORS.text },
-  rowSecondary: { fontSize: 13, color: COLORS.textMuted, marginTop: 1 },
+  rowSecondary: { marginTop: 1 },
   selected: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -147,7 +147,5 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   selectedInfo: { flex: 1 },
-  selectedName: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  selectedAddr: { fontSize: 13, color: COLORS.textMuted, marginTop: 1 },
-  change: { fontSize: 14, ...FONT.medium, color: COLORS.accent },
+  selectedAddr: { marginTop: 1 },
 });

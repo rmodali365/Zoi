@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { FeedItem } from '@/lib/feed';
 import { experienceTitle, localityLabel, sentimentEmoji, sentimentLabel } from '@/lib/experienceDisplay';
 import { TAG_LABELS } from '@/constants/experiences';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -42,16 +44,12 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
         disabled={!onPressAuthor}
         activeOpacity={0.7}
       >
-        {author?.avatar_url ? (
-          <Image source={{ uri: author.avatar_url }} style={styles.avatar} />
-        ) : (
-          <View style={styles.avatar} />
-        )}
+        <Avatar uri={author?.avatar_url} size={36} />
         <View style={styles.headInfo}>
-          <Text style={styles.author} numberOfLines={1}>{author?.name ?? 'Someone'}</Text>
-          <Text style={styles.handle} numberOfLines={1}>@{author?.handle ?? '…'}</Text>
+          <AppText variant="body" weight="semibold" numberOfLines={1}>{author?.name ?? 'Someone'}</AppText>
+          <AppText variant="caption" numberOfLines={1}>@{author?.handle ?? '…'}</AppText>
         </View>
-        <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+        <AppText variant="caption">{timeAgo(item.created_at)}</AppText>
         {onToggleSave && (
           <TouchableOpacity onPress={onToggleSave} hitSlop={8} activeOpacity={0.7} style={styles.saveBtn}>
             <Ionicons
@@ -70,30 +68,32 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
 
       {/* Body */}
       <View style={styles.body}>
-        <Text style={styles.name}>{experienceTitle(item)}</Text>
-        {!!place && <Text style={styles.place}>{place}</Text>}
+        <AppText variant="headline" weight="bold">{experienceTitle(item)}</AppText>
+        {!!place && <AppText variant="subhead" weight="regular">{place}</AppText>}
 
         <View style={styles.rankRow}>
-          <Text style={styles.sentiment}>
+          <AppText variant="subhead" color={COLORS.text}>
             {sentimentEmoji(item.sentiment)} {sentimentLabel(item.sentiment)}
-          </Text>
-          <Text style={styles.rank}>· ranked #{item.rankPosition} of {item.authorTotal}</Text>
+          </AppText>
+          <AppText variant="subhead" weight="regular"> · ranked #{item.rankPosition} of {item.authorTotal}</AppText>
         </View>
 
-        {!!item.quick_take && <Text style={styles.quote}>“{item.quick_take}”</Text>}
+        {!!item.quick_take && (
+          <AppText variant="body" style={styles.quote}>“{item.quick_take}”</AppText>
+        )}
 
         {item.tags.length > 0 && (
           <View style={styles.tags}>
             {item.tags.map((t) => (
               <View key={t} style={styles.tag}>
-                <Text style={styles.tagText}>{TAG_LABELS[t]}</Text>
+                <AppText variant="footnote" weight="medium" color={COLORS.accent}>{TAG_LABELS[t]}</AppText>
               </View>
             ))}
           </View>
         )}
 
         {!!item.trip?.title && (
-          <Text style={styles.trip}>🧳 Part of {item.trip.title}</Text>
+          <AppText variant="caption" style={styles.trip}>🧳 Part of {item.trip.title}</AppText>
         )}
       </View>
     </View>
@@ -115,20 +115,12 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     padding: SPACING.md,
   },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.border },
   headInfo: { flex: 1 },
-  author: { fontSize: 15, ...FONT.semibold, color: COLORS.text },
-  handle: { fontSize: 13, color: COLORS.textMuted },
-  time: { fontSize: 13, color: COLORS.textMuted },
   saveBtn: { marginLeft: SPACING.sm },
   photo: { width: '100%', height: 220, backgroundColor: COLORS.border },
   body: { padding: SPACING.md, gap: SPACING.xs },
-  name: { fontSize: 18, ...FONT.bold, color: COLORS.text },
-  place: { fontSize: 14, color: COLORS.textSecondary },
   rankRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 2 },
-  sentiment: { fontSize: 14, ...FONT.medium, color: COLORS.text },
-  rank: { fontSize: 14, color: COLORS.textSecondary },
-  quote: { fontSize: 15, color: COLORS.text, fontStyle: 'italic', lineHeight: 21, marginTop: SPACING.xs },
+  quote: { fontStyle: 'italic', lineHeight: 21, marginTop: SPACING.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs, marginTop: SPACING.xs },
   tag: {
     backgroundColor: COLORS.accentLight,
@@ -136,6 +128,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.sm + 2,
     paddingVertical: 3,
   },
-  tagText: { fontSize: 12, ...FONT.medium, color: COLORS.accent },
-  trip: { fontSize: 13, color: COLORS.textMuted, marginTop: SPACING.xs },
+  trip: { marginTop: SPACING.xs },
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity,
+  View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity,
   ActivityIndicator, Modal, TextInput, Alert,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
@@ -25,7 +25,8 @@ import { uploadExperiencePhotos } from '@/lib/storage';
 import { supabase } from '@/lib/supabase';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 // TripDetail is registered in both the Profile and Experiences stacks, so type
 // it structurally (it only needs goBack/navigate + the tripId param) rather than
@@ -262,12 +263,12 @@ export function TripDetailScreen({ navigation, route }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
-          <Text style={styles.back}>‹ Back</Text>
+          <AppText variant="body" weight="medium" color={COLORS.accent}>‹ Back</AppText>
         </TouchableOpacity>
         <View style={styles.topActions}>
           {isOwner && items.length > 0 && mode === 'list' && (
             <TouchableOpacity onPress={() => setEditing((e) => !e)} hitSlop={8}>
-              <Text style={styles.editBtn}>{editing ? 'Done' : 'Edit'}</Text>
+              <AppText variant="body" weight="semibold" color={COLORS.brand}>{editing ? 'Done' : 'Edit'}</AppText>
             </TouchableOpacity>
           )}
           {items.length > 0 && (
@@ -313,30 +314,30 @@ export function TripDetailScreen({ navigation, route }: Props) {
           {/* Header */}
           {!!trip?.cover_photo && <Image source={{ uri: trip.cover_photo }} style={styles.cover} />}
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{trip?.title ?? 'Trip'}</Text>
+            <AppText variant="display" style={styles.title}>{trip?.title ?? 'Trip'}</AppText>
             {isOwner && (
               <TouchableOpacity onPress={openEditTrip} hitSlop={8}>
                 <Ionicons name="create-outline" size={22} color={COLORS.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
-          {!!trip?.destination && <Text style={styles.destination}>{trip.destination}</Text>}
-          {!!dates && <Text style={styles.dates}>{dates}</Text>}
-          <Text style={styles.count}>{countLine()}</Text>
+          {!!trip?.destination && <AppText variant="body" color={COLORS.textSecondary} style={styles.destination}>{trip.destination}</AppText>}
+          {!!dates && <AppText variant="subhead" weight="regular" color={COLORS.textSecondary} style={styles.dates}>{dates}</AppText>}
+          <AppText variant="subhead" weight="regular" color={COLORS.textMuted} style={styles.count}>{countLine()}</AppText>
 
           {items.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>This itinerary is empty</Text>
-              <Text style={styles.emptyBody}>
+              <AppText variant="headline" style={styles.emptyTitle}>This itinerary is empty</AppText>
+              <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>
                 {isOwner
                   ? 'Add a planned stop or log an experience to start building it.'
                   : 'Nothing here yet.'}
-              </Text>
+              </AppText>
             </View>
           ) : (
             sections.map((section) => (
               <View key={section.city} style={styles.section}>
-                <Text style={styles.cityHeader}>{section.city}</Text>
+                <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.cityHeader}>{section.city}</AppText>
                 {section.items.map((item, i) => (
                   <ItineraryRow
                     key={item.id}
@@ -367,7 +368,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
           {isOwner && !editing && (
             <TouchableOpacity style={styles.addBtn} onPress={() => setAdding(true)} activeOpacity={0.8}>
               <Ionicons name="add" size={20} color={COLORS.brand} />
-              <Text style={styles.addBtnText}>Add to itinerary</Text>
+              <AppText variant="body" weight="semibold" color={COLORS.brand}>Add to itinerary</AppText>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -378,7 +379,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Add a stop</Text>
+              <AppText variant="title">Add a stop</AppText>
               <TouchableOpacity onPress={closeAdd} hitSlop={8}>
                 <Ionicons name="close" size={24} color={COLORS.textSecondary} />
               </TouchableOpacity>
@@ -404,13 +405,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 >
                   {addStop.isPending
                     ? <ActivityIndicator color={COLORS.surface} />
-                    : <Text style={styles.primaryBtnText}>Add planned stop</Text>}
+                    : <AppText variant="body" weight="semibold" color={COLORS.surface}>Add planned stop</AppText>}
                 </TouchableOpacity>
               </>
             )}
 
             <TouchableOpacity onPress={logExperience} hitSlop={8} style={styles.logLink}>
-              <Text style={styles.logLinkText}>Or log a ranked experience instead</Text>
+              <AppText variant="subhead" color={COLORS.textSecondary}>Or log a ranked experience instead</AppText>
             </TouchableOpacity>
           </View>
         </View>
@@ -421,15 +422,15 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Add to which trip?</Text>
+              <AppText variant="title">Add to which trip?</AppText>
               <TouchableOpacity onPress={() => setPickerItem(null)} hitSlop={8}>
                 <Ionicons name="close" size={24} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
             {myTrips.length === 0 ? (
-              <Text style={styles.pickerEmpty}>
+              <AppText variant="body" color={COLORS.textSecondary} style={styles.pickerEmpty}>
                 You don’t have any trips yet. Start one from the Log tab first.
-              </Text>
+              </AppText>
             ) : (
               <ScrollView style={styles.pickerList}>
                 {myTrips.map((t) => (
@@ -440,8 +441,8 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     disabled={copyStop.isPending}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.pickerRowTitle}>{t.title}</Text>
-                    {!!t.destination && <Text style={styles.pickerRowDest}>{t.destination}</Text>}
+                    <AppText variant="body" weight="semibold">{t.title}</AppText>
+                    {!!t.destination && <AppText variant="caption" color={COLORS.textSecondary} style={styles.pickerRowDest}>{t.destination}</AppText>}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -455,7 +456,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <View style={styles.modalBackdrop}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Edit trip</Text>
+              <AppText variant="title">Edit trip</AppText>
               <TouchableOpacity onPress={() => setEditingTrip(false)} hitSlop={8}>
                 <Ionicons name="close" size={24} color={COLORS.textSecondary} />
               </TouchableOpacity>
@@ -467,7 +468,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 ) : (
                   <View style={[styles.editCover, styles.coverPlaceholder]}>
                     <Ionicons name="image-outline" size={26} color={COLORS.textMuted} />
-                    <Text style={styles.coverHint}>Add a cover photo</Text>
+                    <AppText variant="caption">Add a cover photo</AppText>
                   </View>
                 )}
               </TouchableOpacity>
@@ -497,7 +498,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               >
                 {saveTrip.isPending
                   ? <ActivityIndicator color={COLORS.surface} />
-                  : <Text style={styles.primaryBtnText}>Save</Text>}
+                  : <AppText variant="body" weight="semibold" color={COLORS.surface}>Save</AppText>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -537,18 +538,18 @@ function ItineraryRow({
         {planned ? (
           <Ionicons name="ellipse-outline" size={18} color={COLORS.textMuted} />
         ) : (
-          <Text style={styles.rowEmoji}>{sentimentEmoji(item.sentiment) || '📍'}</Text>
+          <AppText style={styles.rowEmoji}>{sentimentEmoji(item.sentiment) || '📍'}</AppText>
         )}
       </View>
       <View style={styles.rowBody}>
-        <Text style={styles.rowTitle} numberOfLines={1}>{experienceTitle(item)}</Text>
-        {!!place && <Text style={styles.rowPlace} numberOfLines={1}>{place}</Text>}
-        {planned && !!item.note && <Text style={styles.rowNote}>{item.note}</Text>}
-        {!planned && !!item.quick_take && <Text style={styles.rowQuote}>“{item.quick_take}”</Text>}
+        <AppText variant="body" weight="semibold" numberOfLines={1}>{experienceTitle(item)}</AppText>
+        {!!place && <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1}>{place}</AppText>}
+        {planned && !!item.note && <AppText variant="caption" style={styles.rowNote}>{item.note}</AppText>}
+        {!planned && !!item.quick_take && <AppText variant="subhead" weight="regular" color={COLORS.text} style={styles.rowQuote}>“{item.quick_take}”</AppText>}
         {!planned && item.tags.length > 0 && (
-          <Text style={styles.rowTags} numberOfLines={1}>
+          <AppText variant="footnote" numberOfLines={1} style={styles.rowTags}>
             {item.tags.map((t) => TAG_LABELS[t]).join(' · ')}
-          </Text>
+          </AppText>
         )}
       </View>
       {editing ? (
@@ -576,7 +577,7 @@ function ItineraryRow({
         </View>
       ) : planned ? (
         <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
-          <Text style={styles.rankBtnText}>Rank</Text>
+          <AppText variant="caption" weight="semibold" color={COLORS.surface}>Rank</AppText>
         </TouchableOpacity>
       ) : item.photos.length > 0 ? (
         <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
@@ -593,8 +594,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  back: { fontSize: 16, ...FONT.medium, color: COLORS.accent },
-  editBtn: { fontSize: 16, ...FONT.semibold, color: COLORS.brand },
   toggle: {
     flexDirection: 'row', backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.full, padding: 2, gap: 2,
@@ -608,13 +607,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border, marginBottom: SPACING.md,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
-  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5, flex: 1 },
-  destination: { fontSize: 16, color: COLORS.textSecondary, marginTop: 2 },
-  dates: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
-  count: { fontSize: 14, color: COLORS.textMuted, marginTop: SPACING.xs, marginBottom: SPACING.lg },
+  title: { flex: 1 },
+  destination: { marginTop: 2 },
+  dates: { marginTop: 2 },
+  count: { marginTop: SPACING.xs, marginBottom: SPACING.lg },
   section: { marginBottom: SPACING.lg },
   cityHeader: {
-    fontSize: 13, ...FONT.semibold, color: COLORS.textSecondary,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: SPACING.sm,
   },
   row: {
@@ -625,27 +623,23 @@ const styles = StyleSheet.create({
   rowIcon: { width: 28, alignItems: 'center', justifyContent: 'center' },
   rowEmoji: { fontSize: 20 },
   rowBody: { flex: 1, gap: 1 },
-  rowTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  rowPlace: { fontSize: 13, color: COLORS.textSecondary },
-  rowNote: { fontSize: 13, color: COLORS.textMuted, marginTop: 2 },
-  rowQuote: { fontSize: 14, color: COLORS.text, fontStyle: 'italic', marginTop: 2 },
-  rowTags: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  rowNote: { marginTop: 2 },
+  rowQuote: { fontStyle: 'italic', marginTop: 2 },
+  rowTags: { marginTop: 2 },
   rowControls: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
   rankBtn: {
     paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2,
     borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
   },
-  rankBtnText: { fontSize: 13, ...FONT.semibold, color: COLORS.surface },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
     borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: RADIUS.md,
     paddingVertical: SPACING.md, marginTop: SPACING.sm,
   },
-  addBtnText: { fontSize: 15, ...FONT.semibold, color: COLORS.brand },
   empty: { paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
-  emptyTitle: { fontSize: 17, ...FONT.semibold, color: COLORS.text, textAlign: 'center' },
-  emptyBody: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { textAlign: 'center' },
+  emptyBody: { textAlign: 'center', lineHeight: 22 },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: COLORS.overlay },
   sheet: {
     backgroundColor: COLORS.background,
@@ -653,7 +647,6 @@ const styles = StyleSheet.create({
     padding: SPACING.xl, paddingBottom: SPACING.xxl, gap: SPACING.md, minHeight: 320,
   },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle: { fontSize: 20, ...FONT.bold, color: COLORS.text },
   noteInput: {
     borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md, paddingVertical: 12, fontSize: 15, color: COLORS.text,
@@ -663,21 +656,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.brand, borderRadius: RADIUS.md,
     paddingVertical: SPACING.md, alignItems: 'center',
   },
-  primaryBtnText: { fontSize: 16, ...FONT.semibold, color: COLORS.surface },
   logLink: { alignItems: 'center', paddingVertical: SPACING.sm },
-  logLinkText: { fontSize: 14, ...FONT.medium, color: COLORS.textSecondary },
-  pickerEmpty: { fontSize: 15, color: COLORS.textSecondary, lineHeight: 22, paddingVertical: SPACING.md },
+  pickerEmpty: { lineHeight: 22, paddingVertical: SPACING.md },
   pickerList: { maxHeight: 320 },
   pickerRow: {
     paddingVertical: SPACING.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
   },
-  pickerRowTitle: { fontSize: 16, ...FONT.semibold, color: COLORS.text },
-  pickerRowDest: { fontSize: 13, color: COLORS.textSecondary, marginTop: 1 },
+  pickerRowDest: { marginTop: 1 },
   editForm: { gap: SPACING.md, paddingTop: SPACING.sm },
   coverPicker: { borderRadius: RADIUS.md, overflow: 'hidden' },
   editCover: { width: '100%', height: 140, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: SPACING.xs },
-  coverHint: { fontSize: 13, color: COLORS.textMuted },
   dateRow: { flexDirection: 'row', gap: SPACING.md },
   dateInput: { flex: 1 },
 });

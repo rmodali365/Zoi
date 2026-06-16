@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TextInput,
+  View, StyleSheet, SafeAreaView, TextInput,
 } from 'react-native';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { AppText } from '@/components/ui/AppText';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 export function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -10,7 +11,7 @@ export function SearchScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Search</Text>
+        <AppText variant="display">Search</AppText>
         <View style={styles.searchBar}>
           <TextInput
             style={styles.input}
@@ -25,9 +26,9 @@ export function SearchScreen() {
 
       {!query && (
         <View style={styles.hint}>
-          <Text style={styles.hintText}>
+          <AppText variant="body" color={COLORS.textSecondary} style={styles.hintText}>
             Search for a city to see what your friends have ranked there.
-          </Text>
+          </AppText>
         </View>
       )}
     </SafeAreaView>
@@ -42,7 +43,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     gap: SPACING.md,
   },
-  title: { fontSize: 28, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
   searchBar: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
@@ -61,8 +61,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   hintText: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
   },

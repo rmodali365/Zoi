@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types';
+import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
 
 type Props = {
@@ -13,8 +14,10 @@ export function WelcomeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.hero}>
-          <Text style={styles.wordmark}>Zoi</Text>
-          <Text style={styles.tagline}>Rank what you do.{'\n'}Share your taste.</Text>
+          <AppText style={styles.wordmark}>Zoi</AppText>
+          <AppText variant="title" weight="regular" color={COLORS.textSecondary} style={styles.tagline}>
+            Rank what you do.{'\n'}Share your taste.
+          </AppText>
         </View>
 
         <View style={styles.actions}>
@@ -23,11 +26,11 @@ export function WelcomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('PhoneAuth')}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Get started</Text>
+            <AppText variant="body" weight="semibold" color={COLORS.background}>Get started</AppText>
           </TouchableOpacity>
-          <Text style={styles.legal}>
+          <AppText variant="footnote" style={styles.legal}>
             By continuing you agree to our Terms of Service and Privacy Policy.
-          </Text>
+          </AppText>
         </View>
       </View>
     </SafeAreaView>
@@ -57,9 +60,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   tagline: {
-    fontSize: 20,
-    ...FONT.regular,
-    color: COLORS.textSecondary,
     lineHeight: 28,
   },
   actions: {
@@ -71,14 +71,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  primaryButtonText: {
-    color: COLORS.background,
-    fontSize: 16,
-    ...FONT.semibold,
-  },
   legal: {
-    fontSize: 12,
-    color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 18,
   },
