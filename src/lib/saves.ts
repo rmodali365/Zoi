@@ -38,8 +38,8 @@ export async function unsaveExperience(experienceId: string): Promise<void> {
 }
 
 // The current user's want-to-do list: saved experiences with their author embedded.
-// NOTE: the experiences SELECT policy is follow-gated, so a saved experience whose
-// author the user later unfollowed will silently drop out (acceptable for v1).
+// Saves persist across unfollows: experiences are authenticated-public (public-profiles
+// RLS), so a saved experience stays readable even after unfollowing its author (#7).
 // GOTCHA: experiences↔users is ambiguous (author FK vs the saves m2m), so the embed
 // must name the explicit author FK.
 export async function getSaves(): Promise<SavedExperience[]> {

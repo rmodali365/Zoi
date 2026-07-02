@@ -38,7 +38,8 @@
         {
           "locationWhenInUsePermission": "Zoi uses your location to suggest the right experience bucket."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "scheme": "zoi"
   }

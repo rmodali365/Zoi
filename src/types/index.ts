@@ -1,3 +1,5 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 // Sentiment tier — drives ranking scope and score range
 export type Sentiment = 'loved' | 'liked' | 'fine';
 
@@ -79,6 +81,9 @@ export interface Experience {
   trip_position: string | null;
   // Optional reminder text on a planned stop.
   note: string | null;
+  // When the experience happened (ranked) or is planned for (planned stop).
+  // 'YYYY-MM-DD'; defaults to the log date.
+  experience_date: string;
   created_at: string;
   updated_at: string;
   // Joined
@@ -107,10 +112,10 @@ export type AuthStackParamList = {
 };
 
 export type AppTabParamList = {
-  Feed: undefined;
-  List: undefined;
-  Log: undefined;
-  Profile: { userId?: string };
+  Feed: NavigatorScreenParams<FeedStackParamList> | undefined;
+  List: NavigatorScreenParams<ExperiencesStackParamList> | undefined;
+  Log: NavigatorScreenParams<LogStackParamList> | undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
 // Draft passed from AddExperience into the ranking step before insert
@@ -121,6 +126,8 @@ export type ExperienceDraft = {
   photos: string[];
   quick_take: string;
   trip_id: string | null;
+  // When it happened ('YYYY-MM-DD'); required, defaults to today in the UI.
+  experience_date: string;
 };
 
 export type LogStackParamList = {
@@ -138,12 +145,18 @@ export type FeedStackParamList = {
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
   TripDetail: { tripId: string };
+  ExperienceDetail: { experienceId: string };
 };
 
 // Experiences tab (formerly "My List") — now a stack so trips are tappable.
+// UserProfile/FollowList are registered here too so an experience's author
+// (e.g. from a Wishlist row) can be opened without leaving the tab.
 export type ExperiencesStackParamList = {
   ExperiencesHome: undefined;
   TripDetail: { tripId: string };
+  ExperienceDetail: { experienceId: string };
+  UserProfile: { userId: string };
+  FollowList: { userId: string; mode: 'followers' | 'following' };
 };
 
 export type ProfileStackParamList = {
@@ -152,4 +165,5 @@ export type ProfileStackParamList = {
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
   EditProfile: undefined;
+  ExperienceDetail: { experienceId: string };
 };

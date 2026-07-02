@@ -7,10 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FeedStackParamList } from '@/types';
-import { getFeed } from '@/lib/feed';
+import { getFeed, FeedEntry } from '@/lib/feed';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
 import { ExperienceCard } from '@/components/ExperienceCard';
+import { TripFeedCard } from '@/components/TripFeedCard';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -74,15 +75,24 @@ export function FeedScreen({ navigation }: Props) {
       ) : (
         <FlatList
           data={items}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ExperienceCard
-              item={item}
-              onPressAuthor={() => navigation.navigate('UserProfile', { userId: item.user_id })}
-              saved={savedIds.has(item.id)}
-              onToggleSave={() => toggle.mutate({ id: item.id, wasSaved: savedIds.has(item.id) })}
-            />
-          )}
+          keyExtractor={(entry: FeedEntry) => entry.id}
+          renderItem={({ item: entry }) =>
+            entry.kind === 'trip' ? (
+              <TripFeedCard
+                trip={entry.trip}
+                onPress={() => navigation.navigate('TripDetail', { tripId: entry.trip.id })}
+                onPressAuthor={() => navigation.navigate('UserProfile', { userId: entry.trip.user_id })}
+              />
+            ) : (
+              <ExperienceCard
+                item={entry.item}
+                onPress={() => navigation.navigate('ExperienceDetail', { experienceId: entry.item.id })}
+                onPressAuthor={() => navigation.navigate('UserProfile', { userId: entry.item.user_id })}
+                saved={savedIds.has(entry.item.id)}
+                onToggleSave={() => toggle.mutate({ id: entry.item.id, wasSaved: savedIds.has(entry.item.id) })}
+              />
+            )
+          }
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
@@ -90,7 +100,7 @@ export function FeedScreen({ navigation }: Props) {
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>Follow friends to see their rankings</AppText>
               <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>
-                When friends rank experiences, they'll show up here.
+                When friends rank experiences or build trips, they'll show up here.
               </AppText>
               <TouchableOpacity
                 style={styles.cta}

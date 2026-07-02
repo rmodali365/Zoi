@@ -12,6 +12,8 @@ import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
 import { Chip } from '@/components/ui/Chip';
+import { DateField } from '@/components/ui/DateField';
+import { todayString } from '@/lib/dates';
 import { getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -33,6 +35,8 @@ export function AddExperienceScreen({ navigation, route }: Props) {
   const [quickTake, setQuickTake] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [tripId, setTripId] = useState<string | null>(presetTripId);
+  // When it happened — required, pre-filled with today (past dates allowed).
+  const [date, setDate] = useState(todayString());
 
   // Trips the experience can be filed under — shared cache with My List / Profile.
   const { data: trips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
@@ -90,6 +94,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         tags,
         // Preset trip wins; it can't be changed in the UI when coming from a trip.
         trip_id: presetTripId ?? tripId,
+        experience_date: date,
       },
     });
   }
@@ -140,6 +145,12 @@ export function AddExperienceScreen({ navigation, route }: Props) {
             </View>
           ))}
           <LocationSearch value={null} onChange={(loc) => loc && addLocation(loc)} />
+        </View>
+
+        {/* When it happened */}
+        <View style={styles.field}>
+          <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>When</AppText>
+          <DateField value={date} onChange={setDate} maximumDate={new Date()} />
         </View>
 
         {/* Photos */}

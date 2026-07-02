@@ -7,4 +7,5 @@ export const qk = {
   myTrips: ['trips', 'me'] as const,
   myProfile: ['profile', 'me'] as const,
   trip: (id: string) => ['trip', id] as const,
+  experience: (id: string) => ['experience', id] as const,
 };

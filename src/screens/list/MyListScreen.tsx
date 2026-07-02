@@ -208,7 +208,12 @@ export function MyListScreen({ navigation }: Props) {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
           >
             {items.map((item, i) => (
-              <View key={item.id} style={styles.row}>
+              <TouchableOpacity
+                key={item.id}
+                style={styles.row}
+                onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
+                activeOpacity={0.7}
+              >
                 <View style={styles.rankBadge}>
                   <AppText variant="body" weight="bold" color={COLORS.brand}>{i + 1}</AppText>
                 </View>
@@ -228,7 +233,7 @@ export function MyListScreen({ navigation }: Props) {
                 {item.photos.length > 0 && (
                   <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
                 )}
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )
@@ -269,7 +274,12 @@ export function MyListScreen({ navigation }: Props) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
         >
           {saved.map((item) => (
-            <View key={item.id} style={styles.row}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.row}
+              onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
+              activeOpacity={0.7}
+            >
               {item.photos.length > 0 ? (
                 <Image source={{ uri: item.photos[0] }} style={styles.savedThumb} />
               ) : (
@@ -296,7 +306,7 @@ export function MyListScreen({ navigation }: Props) {
               <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
                 <Ionicons name="bookmark" size={22} color={COLORS.brand} />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}

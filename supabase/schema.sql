@@ -111,6 +111,9 @@ create table public.experiences (
   trip_position text,
   -- Optional reminder text on a planned stop.
   note text,
+  -- When the experience happened (ranked) or is planned for (planned stop).
+  -- Backfilled from created_at (see migration 20260702000000_experience_date).
+  experience_date date not null default current_date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
