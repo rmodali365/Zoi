@@ -3,8 +3,8 @@ import {
   View, StyleSheet, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
-import { LogStackParamList, Experience, Sentiment } from '@/types';
+import { RouteProp, NavigationProp } from '@react-navigation/native';
+import { AppTabParamList, LogStackParamList, Experience, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { experienceTitle } from '@/lib/experienceDisplay';
@@ -94,6 +94,21 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     await save(sentiment, rankKeyForPositionIn(pool, pos), pos, pool.length + 1);
   }
 
+  // Exit the form flow no matter how we entered it (#52). popToTop() isn't enough:
+  // deep-navigating from a trip can make AddExperience the Log stack's ROOT, where
+  // popToTop() is a no-op and the user lands back on the stale filled-in form. So
+  // reset the Log stack to LogHome, then jump to where the result is visible —
+  // the trip's itinerary when the log belongs to a trip, else the ranked list.
+  function finish() {
+    navigation.reset({ index: 0, routes: [{ name: 'LogHome' }] });
+    const tabNav = navigation.getParent<NavigationProp<AppTabParamList>>();
+    if (draft.trip_id) {
+      tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id } });
+    } else {
+      tabNav?.navigate('List', { screen: 'ExperiencesHome' });
+    }
+  }
+
   async function save(s: Sentiment, rankKey: string, pos: number, total: number) {
     const userId = await getMyUserId();
     if (!userId) return;
@@ -107,12 +122,20 @@ export function RankExperienceScreen({ navigation, route }: Props) {
 
     try {
       if (experienceId) {
-        // Graduating an existing planned stop: flip it to ranked in place, keeping its
-        // trip membership, position, place, photos and note untouched.
-        await graduatePlannedStop(experienceId, s, rankKey);
+        // Graduating an existing planned stop: flip it to ranked in place (keeping
+        // trip membership + position) and persist everything captured on the way.
+        await graduatePlannedStop({
+          experienceId,
+          draft,
+          sentiment: s,
+          rankKey,
+          onPhotoError: () =>
+            Alert.alert('Photo upload failed', 'Saving your experience without the new photos.'),
+        });
         invalidate();
+        queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
         Alert.alert('Ranked!', `${draft.title} landed at #${pos + 1} of ${total}.`,
-          [{ text: 'Done', onPress: () => navigation.popToTop() }]);
+          [{ text: 'Done', onPress: finish }]);
         return;
       }
 
@@ -138,7 +161,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       isFirst
         ? `${draft.title} is your #1. You started your list!`
         : `${draft.title} landed at #${pos + 1} of ${total}`,
-      [{ text: 'Done', onPress: () => navigation.popToTop() }],
+      [{ text: 'Done', onPress: finish }],
     );
   }
 

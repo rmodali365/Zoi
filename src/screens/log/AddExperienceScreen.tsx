@@ -1,33 +1,80 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, StyleSheet, TextInput, TouchableOpacity, SafeAreaView,
-  ScrollView, Image, Alert,
+  ScrollView, Image, Alert, ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useQuery } from '@tanstack/react-query';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
-import { LogStackParamList, Location, Tag } from '@/types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { NavigationProp, RouteProp } from '@react-navigation/native';
+import { Location, Tag, ExperienceDraft } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
+import { experienceLocations } from '@/lib/experienceDisplay';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
 import { Chip } from '@/components/ui/Chip';
 import { DateField } from '@/components/ui/DateField';
 import { todayString } from '@/lib/dates';
+import { getExperience, updateExperience } from '@/lib/experiences';
 import { getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
-type Props = {
-  navigation: NativeStackNavigationProp<LogStackParamList, 'AddExperience'>;
-  route: RouteProp<LogStackParamList, 'AddExperience'>;
-};
+// One form, three modes:
+// - create:   normal log — Next hands an ExperienceDraft to RankExperience.
+// - graduate: capture step for ranking a planned stop (#51) — prefilled from the
+//             row, trip locked, Next goes to RankExperience with experienceId so
+//             the save updates the row in place.
+// - edit:     owner content edit (#53) — prefilled, Save updates the row directly
+//             (rank/sentiment untouched) and pops back.
+type Mode = 'create' | 'graduate' | 'edit';
+
+// Registered across stacks (Log as AddExperience; Feed/Experiences/Profile as
+// EditExperience), so navigation is typed structurally like TripDetailScreen.
+type FormNav = NavigationProp<Record<string, object | undefined>>;
 
 const MAX_PHOTOS = 5;
 const MAX_TAGS = 3;
 
-export function AddExperienceScreen({ navigation, route }: Props) {
-  const presetTripId = route.params?.tripId ?? null;
+type AddProps = {
+  navigation: FormNav;
+  route: RouteProp<
+    { AddExperience: { tripId?: string; graduateExperienceId?: string } | undefined },
+    'AddExperience'
+  >;
+};
+
+export function AddExperienceScreen({ navigation, route }: AddProps) {
+  const graduateId = route.params?.graduateExperienceId;
+  return (
+    <ExperienceForm
+      navigation={navigation}
+      mode={graduateId ? 'graduate' : 'create'}
+      presetTripId={route.params?.tripId ?? null}
+      experienceId={graduateId}
+    />
+  );
+}
+
+type EditProps = {
+  navigation: FormNav;
+  route: RouteProp<{ EditExperience: { experienceId: string } }, 'EditExperience'>;
+};
+
+export function EditExperienceScreen({ navigation, route }: EditProps) {
+  return (
+    <ExperienceForm navigation={navigation} mode="edit" experienceId={route.params.experienceId} />
+  );
+}
+
+type FormProps = {
+  navigation: FormNav;
+  mode: Mode;
+  presetTripId?: string | null;
+  experienceId?: string;
+};
+
+function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }: FormProps) {
+  const queryClient = useQueryClient();
 
   const [title, setTitle] = useState('');
   const [locations, setLocations] = useState<Location[]>([]);
@@ -37,9 +84,29 @@ export function AddExperienceScreen({ navigation, route }: Props) {
   const [tripId, setTripId] = useState<string | null>(presetTripId);
   // When it happened — required, pre-filled with today (past dates allowed).
   const [date, setDate] = useState(todayString());
+  // Graduate/edit prefill happens once, after the row loads.
+  const [hydrated, setHydrated] = useState(mode === 'create');
 
   // Trips the experience can be filed under — shared cache with My List / Profile.
   const { data: trips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
+
+  const { data: existing } = useQuery({
+    queryKey: qk.experience(experienceId as string),
+    queryFn: () => getExperience(experienceId as string),
+    enabled: !!experienceId,
+  });
+
+  useEffect(() => {
+    if (hydrated || !existing) return;
+    setTitle(existing.title ?? '');
+    setLocations(experienceLocations(existing));
+    setPhotos(existing.photos);
+    setQuickTake(existing.quick_take);
+    setTags(existing.tags);
+    setTripId(existing.trip_id);
+    setDate(existing.experience_date);
+    setHydrated(true);
+  }, [existing, hydrated]);
 
   async function pickPhotos() {
     if (photos.length >= MAX_PHOTOS) return;
@@ -75,28 +142,77 @@ export function AddExperienceScreen({ navigation, route }: Props) {
   }
 
   // When we arrived from "Start a trip → Add experience", the trip is fixed and
-  // authoritative — never let it drift to null. Otherwise use the picked trip.
-  const presetTrip = presetTripId ? trips.find((t) => t.id === presetTripId) : null;
+  // authoritative — never let it drift to null. Graduation keeps the row's trip.
+  const tripLocked = mode === 'graduate' || !!presetTripId;
+  const lockedTripId = mode === 'graduate' ? (existing?.trip_id ?? null) : presetTripId;
+  const lockedTrip = lockedTripId ? trips.find((t) => t.id === lockedTripId) : null;
 
-  function handleNext() {
+  function buildDraft(): ExperienceDraft | null {
     if (locations.length === 0) {
       Alert.alert('Add a place', 'Add at least one location for this experience.');
-      return;
+      return null;
     }
+    return {
+      // Title is optional; default to the first place's name.
+      title: title.trim() || locations[0].name,
+      locations,
+      // Local URIs upload at save time; remote URLs pass through unchanged.
+      photos,
+      quick_take: quickTake.trim(),
+      tags,
+      trip_id: tripLocked ? lockedTripId : tripId,
+      experience_date: date,
+    };
+  }
+
+  function handleNext() {
+    const draft = buildDraft();
+    if (!draft) return;
     navigation.navigate('RankExperience', {
-      draft: {
-        // Title is optional; default to the first place's name.
-        title: title.trim() || locations[0].name,
-        locations,
-        // Local URIs here; uploaded to Storage at save time in RankExperienceScreen
-        photos,
-        quick_take: quickTake.trim(),
-        tags,
-        // Preset trip wins; it can't be changed in the UI when coming from a trip.
-        trip_id: presetTripId ?? tripId,
-        experience_date: date,
-      },
+      draft,
+      // Graduation updates the planned row in place instead of inserting.
+      experienceId: mode === 'graduate' ? experienceId : undefined,
     });
+  }
+
+  const saveEdit = useMutation({
+    mutationFn: (draft: ExperienceDraft) =>
+      updateExperience({
+        id: experienceId as string,
+        draft,
+        onPhotoError: () =>
+          Alert.alert('Photo upload failed', 'Saving your changes without the new photos.'),
+      }),
+    onSuccess: (_d, draft) => {
+      queryClient.invalidateQueries({ queryKey: qk.experience(experienceId as string) });
+      queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+      queryClient.invalidateQueries({ queryKey: qk.myTrips });
+      queryClient.invalidateQueries({ queryKey: qk.saves });
+      if (existing?.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(existing.trip_id) });
+      if (draft.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(draft.trip_id) });
+      navigation.goBack();
+    },
+    onError: (e: unknown) =>
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  function handleSave() {
+    const draft = buildDraft();
+    if (!draft) return;
+    saveEdit.mutate(draft);
+  }
+
+  const heading =
+    mode === 'edit' ? 'Edit experience'
+    : mode === 'graduate' ? 'Finish this stop'
+    : 'New experience';
+
+  if (!hydrated) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator color={COLORS.text} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -105,13 +221,29 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
           <AppText variant="body" color={COLORS.textSecondary}>Cancel</AppText>
         </TouchableOpacity>
-        <AppText variant="body" weight="semibold">New experience</AppText>
-        <TouchableOpacity onPress={handleNext} hitSlop={8}>
-          <AppText variant="body" weight="semibold" color={COLORS.accent}>Next</AppText>
-        </TouchableOpacity>
+        <AppText variant="body" weight="semibold">{heading}</AppText>
+        {mode === 'edit' ? (
+          <TouchableOpacity onPress={handleSave} disabled={saveEdit.isPending} hitSlop={8}>
+            {saveEdit.isPending
+              ? <ActivityIndicator size="small" color={COLORS.accent} />
+              : <AppText variant="body" weight="semibold" color={COLORS.accent}>Save</AppText>}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={handleNext} hitSlop={8}>
+            <AppText variant="body" weight="semibold" color={COLORS.accent}>Next</AppText>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {mode === 'graduate' && (
+          <View style={styles.graduateBanner}>
+            <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}>
+              Add photos and a quick take before you rank it — or hit Next to rank as-is.
+            </AppText>
+          </View>
+        )}
+
         {/* Title */}
         <View style={styles.field}>
           <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Title</AppText>
@@ -151,6 +283,9 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         <View style={styles.field}>
           <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>When</AppText>
           <DateField value={date} onChange={setDate} maximumDate={new Date()} />
+          {mode === 'graduate' && (
+            <AppText variant="caption">Confirm when it actually happened.</AppText>
+          )}
         </View>
 
         {/* Photos */}
@@ -203,17 +338,22 @@ export function AddExperienceScreen({ navigation, route }: Props) {
         </View>
 
         {/* Trip association */}
-        {presetTripId ? (
-          // Came from "Start a trip → Add experience": the trip is locked in and shown.
-          <View style={styles.field}>
-            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Trip</AppText>
-            <View style={styles.tripBanner}>
-              <AppText variant="body" weight="medium">🧳 Adding to {presetTrip?.title ?? 'your trip'}</AppText>
+        {tripLocked ? (
+          lockedTripId ? (
+            <View style={styles.field}>
+              <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Trip</AppText>
+              <View style={styles.tripBanner}>
+                <AppText variant="body" weight="medium">
+                  🧳 {mode === 'graduate' ? 'Stays in' : 'Adding to'} {lockedTrip?.title ?? 'your trip'}
+                </AppText>
+              </View>
             </View>
-          </View>
+          ) : null
         ) : trips.length > 0 ? (
           <View style={styles.field}>
-            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Add to a trip</AppText>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>
+              {mode === 'edit' ? 'Trip' : 'Add to a trip'}
+            </AppText>
             <View style={styles.chips}>
               <Chip label="None" selected={tripId === null} onPress={() => setTripId(null)} />
               {trips.map((trip) => (
@@ -234,6 +374,7 @@ export function AddExperienceScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  centered: { alignItems: 'center', justifyContent: 'center' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -246,6 +387,12 @@ const styles = StyleSheet.create({
   content: { padding: SPACING.xl, gap: SPACING.lg, paddingBottom: SPACING.xxl },
   field: { gap: SPACING.sm },
   label: { textTransform: 'uppercase', letterSpacing: 0.5 },
+  graduateBanner: {
+    backgroundColor: COLORS.brandLight,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+  },
   input: {
     borderWidth: 1.5,
     borderColor: COLORS.border,

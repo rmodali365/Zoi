@@ -274,24 +274,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
     } as object);
   }
 
-  // Graduate a planned stop: hand its details to the ranking flow, which updates the
-  // existing row in place (keeping it in the trip at its position) once ranked.
+  // Graduate a planned stop: route through the capture step (AddExperience in
+  // graduate mode, prefilled from the row) so photos/quick take/tags can be added
+  // before ranking (#51). The save still updates the existing row in place.
   function rankStop(item: Experience) {
-    const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
     (navigation as NavigationProp<Record<string, object>>).navigate('Log', {
-      screen: 'RankExperience',
-      params: {
-        draft: {
-          title: experienceTitle(item),
-          locations: locs,
-          tags: item.tags,
-          photos: item.photos,
-          quick_take: item.quick_take,
-          trip_id: item.trip_id,
-          experience_date: item.experience_date,
-        },
-        experienceId: item.id,
-      },
+      screen: 'AddExperience',
+      params: { graduateExperienceId: item.id },
     } as object);
   }
 

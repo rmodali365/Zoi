@@ -132,7 +132,9 @@ export type ExperienceDraft = {
 
 export type LogStackParamList = {
   LogHome: undefined;
-  AddExperience: { tripId?: string } | undefined;
+  // tripId: preset trip when logging from a trip. graduateExperienceId: capture step
+  // for ranking an existing planned stop — prefills from that row (#51).
+  AddExperience: { tripId?: string; graduateExperienceId?: string } | undefined;
   // experienceId set when ranking ("graduating") an existing planned trip stop —
   // save updates that row in place instead of inserting a new experience.
   RankExperience: { draft: ExperienceDraft; experienceId?: string };
@@ -146,6 +148,7 @@ export type FeedStackParamList = {
   FollowList: { userId: string; mode: 'followers' | 'following' };
   TripDetail: { tripId: string };
   ExperienceDetail: { experienceId: string };
+  EditExperience: { experienceId: string };
 };
 
 // Experiences tab (formerly "My List") — now a stack so trips are tappable.
@@ -155,6 +158,7 @@ export type ExperiencesStackParamList = {
   ExperiencesHome: undefined;
   TripDetail: { tripId: string };
   ExperienceDetail: { experienceId: string };
+  EditExperience: { experienceId: string };
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
 };
@@ -166,4 +170,5 @@ export type ProfileStackParamList = {
   FollowList: { userId: string; mode: 'followers' | 'following' };
   EditProfile: undefined;
   ExperienceDetail: { experienceId: string };
+  EditExperience: { experienceId: string };
 };

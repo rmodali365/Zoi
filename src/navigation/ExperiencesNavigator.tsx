@@ -4,6 +4,7 @@ import { ExperiencesStackParamList } from '@/types';
 import { MyListScreen } from '@/screens/list/MyListScreen';
 import { TripDetailScreen } from '@/screens/profile/TripDetailScreen';
 import { ExperienceDetailScreen } from '@/screens/experience/ExperienceDetailScreen';
+import { EditExperienceScreen } from '@/screens/log/AddExperienceScreen';
 import { UserProfileScreen } from '@/screens/profile/UserProfileScreen';
 import { FollowListScreen } from '@/screens/profile/FollowListScreen';
 
@@ -18,6 +19,7 @@ export function ExperiencesNavigator() {
       <Stack.Screen name="ExperiencesHome" component={MyListScreen} />
       <Stack.Screen name="TripDetail" component={TripDetailScreen} />
       <Stack.Screen name="ExperienceDetail" component={ExperienceDetailScreen} />
+      <Stack.Screen name="EditExperience" component={EditExperienceScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} />
       <Stack.Screen name="FollowList" component={FollowListScreen} />
     </Stack.Navigator>
