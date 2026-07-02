@@ -66,11 +66,13 @@ src/
     places.ts               # client wrapper for the `places` Edge Function
     storage.ts              # uploadExperiencePhotos() + uploadAvatar() — local URIs -> public URLs
     ranking.ts              # fractional-index helpers (used by BOTH rank_key and trip_position)
+    dates.ts                # date-only ('YYYY-MM-DD') helpers: today/format/daysBetween (local time)
     queryClient.ts          # shared React Query client
     queryKeys.ts            # qk — centralized query keys (reads + invalidations can't drift)
   components/
-    ui/                     # primitives: AppText, Avatar, Card, Chip, SegmentedControl
+    ui/                     # primitives: AppText, Avatar, Card, Chip, SegmentedControl, DateField
     ExperienceCard.tsx      # feed card: author, photo, place, rank, tags, quick take, save button
+    TripFeedCard.tsx        # feed card for a followed user's trip (cover + itinerary summary)
     ExperienceRow.tsx       # compact ranked-list row
     TripCard.tsx            # trip cover card (Trips subtab / profile strip)
     UserRow.tsx             # user row w/ follow button (FindPeople, FollowList)
@@ -97,6 +99,7 @@ src/
     feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow
     list/MyListScreen.tsx   # Experiences tab: Ranked (list/map toggle) / Trips / Wishlist subtabs
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
+    experience/ExperienceDetailScreen.tsx  # read-only full view (carousel, rank, map); all stacks
     profile/ProfileScreen.tsx     # own profile: avatar, counts, share, trips strip, ranked list
     profile/UserProfileScreen.tsx # someone else's profile (follow, browse trips/experiences)
     profile/FollowListScreen.tsx  # followers / following list
@@ -126,11 +129,14 @@ Two entity types (NO "buckets"):
   trip stops not yet done — just place(s) + optional `note`). Locations are **multi**:
   `locations` jsonb array is canonical, `location` (= locations[0]) is a denormalized
   single kept for the map pin / legacy rows. Also: optional `trip_id`, `title`, tags[],
-  photos[], quick_take, and `trip_position` (per-trip itinerary order, independent of
-  rank_key — both are fractional indexes from `src/lib/ranking.ts`).
+  photos[], quick_take, `experience_date` (required 'YYYY-MM-DD' — when it happened /
+  is planned for; defaults to today via `ui/DateField`), and `trip_position` (per-trip
+  itinerary order, independent of rank_key — both are fractional indexes from
+  `src/lib/ranking.ts`).
 - **Trip** = an itinerary container grouping experiences via `experiences.trip_id`. NOT
   ranked itself. Has title/destination/dates/cover_photo. TripDetail renders city-grouped
-  sections ordered by `trip_position` (`groupByCity` in `lib/trips.ts`).
+  sections ordered by `trip_position` (`groupByCity` in `lib/trips.ts`), with an optional
+  day-grouped view (`groupByDay` over `experience_date`) when the trip has a start date.
 
 **Planned → ranked ("graduation"):** a planned stop becomes a real ranked experience via
 the normal rank flow with `experienceId` set — `graduatePlannedStop` flips the same row in
@@ -152,10 +158,15 @@ by all signed-in users; follows still gate the *feed*, not visibility). This exi
 trips work as inspiration: a friend going to the same place browses your profile/trip and
 - **copies a stop** into their own trip as a fresh planned stop (`copyStopToTrip` — place +
   note only, your ranking/take stays yours), or
+- **follows a whole trip** (`forkTrip` — clones every stop as `planned` into a new trip
+  they own; rankings/takes/photos stay behind), or
 - **saves an experience** to their Wishlist (`saves` table → Wishlist subtab), or
 - **shares a profile** via the native share sheet + `zoi://user/<id>` deep link (`lib/share.ts`).
-The Feed shows followed users' ranked experiences (newest first) with each item's position
-in the author's list ("#3 of 41") — computed client-side in `getFeed()`.
+The Feed mixes followed users' ranked experiences and non-empty trips (newest first);
+experiences carry the author's rank position ("#3 of 41") — computed client-side in
+`getFeed()`. Tapping any experience anywhere opens the read-only **ExperienceDetail**
+screen (photo carousel, rank strip, tags, map pin, trip link) — registered in the Feed,
+Experiences and Profile stacks.
 
 ### Log flow (Log tab → LogNavigator)
 `LogHome` (two options) → either:
@@ -251,14 +262,15 @@ Functions are excluded from the app's `tsconfig` (they're Deno, not RN).
 
 ## Status / what's next
 
-Built: auth + profiles (edit, avatar, share via deep link), the full log + rank loop,
-trips as city-grouped itineraries (planned stops, reorder, graduate-to-ranked, visitor
-copy/save), Feed + Wishlist + follows/suggested users, map views, photo upload to Storage,
-design system + data layer refactors (PRs #44–46).
+Built: auth + profiles (edit, avatar, share via deep link), the full log + rank loop
+(with required experience dates), trips as city- or day-grouped itineraries (planned
+stops, reorder, graduate-to-ranked, visitor copy/save/fork), Feed with experience + trip
+cards, ExperienceDetail screen, Wishlist + follows/suggested users, map views, photo
+upload to Storage, design system + data layer refactors (PRs #44–46).
 
 Known debt / next up:
-- `getFeed()` fetches all followed users' experiences client-side (no pagination) — move
-  server-side when usage grows.
+- `getFeed()` fetches all followed users' experiences + trips client-side (no
+  pagination) — move server-side when usage grows.
 - Contacts invite flow (expo-contacts installed, not wired).
 - Check-in re-ranking ("does it still hold up?" prompts) — planned.
 - Real SMS (Twilio) before external users.

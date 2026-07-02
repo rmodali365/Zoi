@@ -9,16 +9,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Experience, Location } from '@/types';
+import { Experience, Location, Trip } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji,
 } from '@/lib/experienceDisplay';
 import {
-  getTripDetail, groupByCity, addPlannedStop, removeTripItem, setTripPosition,
-  nextTripPosition, positionToMoveUp, positionToMoveDown, copyStopToTrip,
-  updateTrip, parseDateInput,
+  getTripDetail, groupByCity, groupByDay, addPlannedStop, removeTripItem,
+  setTripPosition, nextTripPosition, positionToMoveUp, positionToMoveDown,
+  copyStopToTrip, forkTrip, updateTrip, parseDateInput,
 } from '@/lib/trips';
+import { todayString } from '@/lib/dates';
 import { getMyProfile, getMyTrips } from '@/lib/me';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { uploadExperiencePhotos } from '@/lib/storage';
@@ -26,6 +27,8 @@ import { getMyUserId } from '@/lib/auth';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
+import { DateField } from '@/components/ui/DateField';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 // TripDetail is registered in both the Profile and Experiences stacks, so type
@@ -37,6 +40,7 @@ type Props = {
 };
 
 type ViewMode = 'list' | 'map';
+type GroupMode = 'city' | 'day';
 
 function hasCoords(e: Experience): boolean {
   const loc = primaryLocation(e);
@@ -81,10 +85,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const { tripId } = route.params;
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<ViewMode>('list');
+  // Group the itinerary by city (default) or by day (#34; offered when dated).
+  const [groupMode, setGroupMode] = useState<GroupMode>('city');
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newLoc, setNewLoc] = useState<Location | null>(null);
   const [newNote, setNewNote] = useState('');
+  const [newDate, setNewDate] = useState(todayString());
   // The stop a visitor is copying into one of their own trips (drives the picker).
   const [pickerItem, setPickerItem] = useState<Experience | null>(null);
   // Edit-trip-details sheet (owner).
@@ -108,7 +115,16 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
   const trip = data?.trip ?? null;
   const items = useMemo(() => data?.items ?? [], [data]);
-  const sections = useMemo(() => groupByCity(items), [items]);
+  // Day grouping is only offered when the trip has a start date to anchor Day 1.
+  const canGroupByDay = !!trip?.start_date;
+  const byDay = groupMode === 'day' && canGroupByDay;
+  const sections = useMemo(
+    () =>
+      byDay
+        ? groupByDay(items, trip?.start_date ?? null).map((s) => ({ key: s.key, label: s.label, items: s.items }))
+        : groupByCity(items).map((s) => ({ key: s.city, label: s.city, items: s.items })),
+    [items, byDay, trip?.start_date],
+  );
   const pins = useMemo(() => items.filter(hasCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
@@ -125,10 +141,35 @@ export function TripDetailScreen({ navigation, route }: Props) {
         location: newLoc as Location,
         note: newNote.trim() || null,
         position: nextTripPosition(items),
+        date: newDate,
       }),
     onSuccess: () => { invalidate(); closeAdd(); },
     onError: (e: unknown) => Alert.alert('Could not add stop', e instanceof Error ? e.message : 'Try again.'),
   });
+
+  // Visitor: "Follow this trip" — clone the whole itinerary as planned stops (#33).
+  const fork = useMutation({
+    mutationFn: () => forkTrip(trip as Trip, items),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.myTrips });
+      Alert.alert(
+        'Trip copied',
+        'Every stop is now a planned stop in a trip you own — find it under Experiences → Trips.',
+      );
+    },
+    onError: (e: unknown) => Alert.alert('Could not copy trip', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  function confirmFork() {
+    Alert.alert(
+      'Follow this trip?',
+      `Copies all ${items.length} ${items.length === 1 ? 'stop' : 'stops'} into a new trip of yours, ready to plan and rank.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Copy trip', onPress: () => fork.mutate() },
+      ],
+    );
+  }
 
   const remove = useMutation({
     mutationFn: (item: Experience) => removeTripItem(item),
@@ -167,6 +208,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     setAdding(false);
     setNewLoc(null);
     setNewNote('');
+    setNewDate(todayString());
   }
 
   function openEditTrip() {
@@ -246,6 +288,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
           photos: item.photos,
           quick_take: item.quick_take,
           trip_id: item.trip_id,
+          experience_date: item.experience_date,
         },
         experienceId: item.id,
       },
@@ -266,7 +309,9 @@ export function TripDetailScreen({ navigation, route }: Props) {
           <AppText variant="body" weight="medium" color={COLORS.accent}>‹ Back</AppText>
         </TouchableOpacity>
         <View style={styles.topActions}>
-          {isOwner && items.length > 0 && mode === 'list' && (
+          {/* Reordering acts on itinerary order, which day-grouping doesn't show —
+              so Edit is only offered in the city view. */}
+          {isOwner && items.length > 0 && mode === 'list' && !byDay && (
             <TouchableOpacity onPress={() => setEditing((e) => !e)} hitSlop={8}>
               <AppText variant="body" weight="semibold" color={COLORS.brand}>{editing ? 'Done' : 'Edit'}</AppText>
             </TouchableOpacity>
@@ -325,6 +370,39 @@ export function TripDetailScreen({ navigation, route }: Props) {
           {!!dates && <AppText variant="subhead" weight="regular" color={COLORS.textSecondary} style={styles.dates}>{dates}</AppText>}
           <AppText variant="subhead" weight="regular" color={COLORS.textMuted} style={styles.count}>{countLine()}</AppText>
 
+          {/* Visitor: copy the whole itinerary into a trip of your own (#33). */}
+          {!isOwner && items.length > 0 && (
+            <TouchableOpacity
+              style={styles.forkBtn}
+              onPress={confirmFork}
+              disabled={fork.isPending}
+              activeOpacity={0.85}
+            >
+              {fork.isPending ? (
+                <ActivityIndicator color={COLORS.surface} />
+              ) : (
+                <>
+                  <Ionicons name="download-outline" size={18} color={COLORS.surface} />
+                  <AppText variant="body" weight="semibold" color={COLORS.surface}>Follow this trip</AppText>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* City vs day grouping (#34) — day needs a start date to anchor Day 1. */}
+          {canGroupByDay && items.length > 0 && (
+            <View style={styles.groupToggle}>
+              <SegmentedControl
+                segments={[
+                  { value: 'city', label: 'By city' },
+                  { value: 'day', label: 'By day' },
+                ]}
+                value={groupMode}
+                onChange={(v) => { setGroupMode(v); if (v === 'day') setEditing(false); }}
+              />
+            </View>
+          )}
+
           {items.length === 0 ? (
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>This itinerary is empty</AppText>
@@ -336,13 +414,14 @@ export function TripDetailScreen({ navigation, route }: Props) {
             </View>
           ) : (
             sections.map((section) => (
-              <View key={section.city} style={styles.section}>
-                <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.cityHeader}>{section.city}</AppText>
+              <View key={section.key} style={styles.section}>
+                <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.cityHeader}>{section.label}</AppText>
                 {section.items.map((item, i) => (
                   <ItineraryRow
                     key={item.id}
                     item={item}
                     editing={editing}
+                    onOpen={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
                     canUp={i > 0}
                     canDown={i < section.items.length - 1}
                     onMoveUp={() => {
@@ -389,6 +468,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
             {!!newLoc && (
               <>
+                <DateField value={newDate} onChange={setNewDate} />
                 <TextInput
                   style={styles.noteInput}
                   value={newNote}
@@ -521,6 +601,8 @@ type RowProps = {
   saved: boolean;
   onToggleSave: () => void;
   onAddToTrip: () => void;
+  // Tapping the row body opens the experience detail screen.
+  onOpen: () => void;
 };
 
 // One itinerary stop — planned (muted, with optional note) or ranked (sentiment +
@@ -528,12 +610,12 @@ type RowProps = {
 // visitors get "save to Want-to-do" (ranked) + "add to my trip" on every stop.
 function ItineraryRow({
   item, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
-  isOwner, onRank, saved, onToggleSave, onAddToTrip,
+  isOwner, onRank, saved, onToggleSave, onAddToTrip, onOpen,
 }: RowProps) {
   const planned = item.status === 'planned';
   const place = localityLabel(item);
   return (
-    <View style={styles.row}>
+    <TouchableOpacity style={styles.row} onPress={onOpen} disabled={editing} activeOpacity={0.7}>
       <View style={styles.rowIcon}>
         {planned ? (
           <Ionicons name="ellipse-outline" size={18} color={COLORS.textMuted} />
@@ -582,7 +664,7 @@ function ItineraryRow({
       ) : item.photos.length > 0 ? (
         <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -637,6 +719,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: RADIUS.md,
     paddingVertical: SPACING.md, marginTop: SPACING.sm,
   },
+  forkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.brand, borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md, marginBottom: SPACING.lg,
+  },
+  groupToggle: { marginBottom: SPACING.lg },
   empty: { paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
   emptyTitle: { textAlign: 'center' },
   emptyBody: { textAlign: 'center', lineHeight: 22 },

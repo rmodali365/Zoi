@@ -6,6 +6,46 @@ import { uploadExperiencePhotos } from '@/lib/storage';
 // Mutations + reads behind the rank-and-log flow. Keeps RankExperienceScreen a thin
 // orchestrator (sentiment → binary compare → save) with no inline Supabase calls.
 
+export type ExperienceDetail = Experience & {
+  // 1-based position in the author's overall ranked list (null for planned stops)
+  // and the size of that list — the "#N of M" shown on the detail screen.
+  rankPosition: number | null;
+  authorTotal: number;
+};
+
+// One experience with its author + trip embedded, plus the author's rank position
+// computed server-side (count of rank_keys at or before this one). Readable for any
+// authenticated user thanks to the public-profiles RLS.
+export async function getExperience(id: string): Promise<ExperienceDetail | null> {
+  const { data, error } = await supabase
+    .from('experiences')
+    .select('*, user:users!experiences_user_id_fkey(id, name, handle, avatar_url), trip:trips(id, title)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const exp = data as Experience;
+
+  const ranked = supabase
+    .from('experiences')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', exp.user_id)
+    .eq('status', 'ranked');
+  const { count: total } = await ranked;
+
+  let rankPosition: number | null = null;
+  if (exp.status === 'ranked' && exp.rank_key) {
+    const { count } = await supabase
+      .from('experiences')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', exp.user_id)
+      .eq('status', 'ranked')
+      .lte('rank_key', exp.rank_key);
+    rankPosition = count ?? null;
+  }
+  return { ...exp, rankPosition, authorTotal: total ?? 0 };
+}
+
 // The ranked pool for a user — the candidates a new experience is binary-compared
 // against. One overall ranked list per user; planned trip stops are excluded.
 export async function getRankedExperiences(userId: string): Promise<Experience[]> {
@@ -75,6 +115,7 @@ export async function insertRankedExperience(args: {
     photos: photoUrls,
     quick_take: draft.quick_take,
     rank_key: rankKey,
+    experience_date: draft.experience_date,
   });
   if (error) throw error;
 }

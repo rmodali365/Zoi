@@ -104,7 +104,12 @@ export function UserProfileScreen() {
           </View>
         ) : (
           experiences.map((item, i) => (
-            <View key={item.id} style={styles.row}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.row}
+              onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
+              activeOpacity={0.7}
+            >
               <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
@@ -114,7 +119,8 @@ export function UserProfileScreen() {
                   <AppText variant="caption" numberOfLines={1} style={styles.rowPlace}>{localityLabel(item)}</AppText>
                 )}
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+            </TouchableOpacity>
           ))
         )}
 

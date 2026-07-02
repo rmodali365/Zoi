@@ -24,6 +24,8 @@ function timeAgo(iso: string): string {
 
 type Props = {
   item: FeedItem;
+  // When provided, tapping the card opens the experience detail.
+  onPress?: () => void;
   // When provided, tapping the author opens their profile.
   onPressAuthor?: () => void;
   // When provided, renders a bookmark toggle reflecting `saved`.
@@ -31,12 +33,12 @@ type Props = {
   onToggleSave?: () => void;
 };
 
-export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSave }: Props) {
+export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, onToggleSave }: Props) {
   const author = item.user;
   const place = localityLabel(item);
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} disabled={!onPress} activeOpacity={0.9}>
       {/* Author */}
       <TouchableOpacity
         style={styles.head}
@@ -96,7 +98,7 @@ export function ExperienceCard({ item, onPressAuthor, saved = false, onToggleSav
           <AppText variant="caption" style={styles.trip}>🧳 Part of {item.trip.title}</AppText>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

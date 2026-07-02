@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { Trip, Experience, Location } from '@/types';
-import { primaryLocation, localityLabel } from '@/lib/experienceDisplay';
+import { primaryLocation, localityLabel, experienceTitle } from '@/lib/experienceDisplay';
 import { keyAfter, keyBefore, keyBetween, initialRankKey } from '@/lib/ranking';
+import { daysBetween, formatDay } from '@/lib/dates';
 
 export type TripDetail = { trip: Trip | null; items: Experience[] };
 
@@ -80,6 +81,32 @@ export function groupByCity(items: Experience[]): CitySection[] {
   return sections;
 }
 
+export type DaySection = { key: string; label: string; items: Experience[] };
+
+// Group itinerary items by their experience_date — "Day N · Jun 3" relative to the
+// trip's start date (dates before the start, or when there's no start, fall back to
+// the bare date label). Days ascend; within a day items keep itinerary order.
+export function groupByDay(items: Experience[], startDate: string | null): DaySection[] {
+  const byDate = [...items].sort((a, b) =>
+    a.experience_date < b.experience_date ? -1
+    : a.experience_date > b.experience_date ? 1
+    : posOf(a) < posOf(b) ? -1 : 1);
+
+  const sections: DaySection[] = [];
+  const indexByKey: Record<string, number> = {};
+  for (const item of byDate) {
+    const date = item.experience_date;
+    const dayNum = startDate ? daysBetween(startDate, date) + 1 : 0;
+    const label = dayNum >= 1 ? `Day ${dayNum} · ${formatDay(date)}` : formatDay(date);
+    if (indexByKey[date] === undefined) {
+      indexByKey[date] = sections.length;
+      sections.push({ key: date, label, items: [] });
+    }
+    sections[indexByKey[date]].items.push(item);
+  }
+  return sections;
+}
+
 // --- Itinerary ordering (fractional index over trip_position) ---
 
 // An item's effective itinerary position. Ranked rows logged before trip_position
@@ -116,6 +143,8 @@ export function positionToMoveDown(items: Experience[], idx: number): string | n
 // Add an unranked planned stop to a trip from a picked place.
 export async function addPlannedStop(args: {
   tripId: string; location: Location; note: string | null; position: string;
+  // When the stop is planned for ('YYYY-MM-DD'); the UI defaults it to today.
+  date: string;
 }): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
@@ -128,6 +157,7 @@ export async function addPlannedStop(args: {
     location: args.location,
     note: args.note,
     trip_position: args.position,
+    experience_date: args.date,
   });
   if (error) throw error;
 }
@@ -180,4 +210,46 @@ export async function copyStopToTrip(item: Experience, tripId: string): Promise<
     trip_position: position,
   });
   if (error) throw error;
+}
+
+// "Follow this trip": duplicate someone else's whole itinerary into a NEW trip you
+// own. Every stop lands as `planned` (place, title, note kept; the owner's rankings,
+// quick takes, photos and dates stay behind). Returns the new trip's id.
+export async function forkTrip(source: Trip, items: Experience[]): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  const { data: t, error } = await supabase
+    .from('trips')
+    .insert({
+      user_id: user.id,
+      title: source.title,
+      destination: source.destination,
+      cover_photo: source.cover_photo,
+    })
+    .select('id')
+    .single();
+  if (error || !t) throw error ?? new Error('Could not copy trip.');
+
+  let pos = initialRankKey();
+  const rows = items.map((item) => {
+    const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
+    const row = {
+      user_id: user.id,
+      status: 'planned',
+      trip_id: t.id,
+      title: experienceTitle(item),
+      locations: locs,
+      location: locs[0] ?? null,
+      note: item.note,
+      trip_position: pos,
+    };
+    pos = keyAfter(pos);
+    return row;
+  });
+  if (rows.length > 0) {
+    const { error: stopsError } = await supabase.from('experiences').insert(rows);
+    if (stopsError) throw stopsError;
+  }
+  return t.id;
 }

@@ -4,11 +4,11 @@ import {
   Image, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, NavigationProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { ProfileStackParamList } from '@/types';
+import { AppTabParamList, ProfileStackParamList } from '@/types';
 import { SuggestedUsers } from '@/components/SuggestedUsers';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { getMyProfile, getMyExperiences, getMyTrips } from '@/lib/me';
@@ -83,6 +83,13 @@ export function ProfileScreen({ navigation }: Props) {
     } finally {
       setUploading(false);
     }
+  }
+
+  // Trips live in the Experiences tab — tapping one of my trip cards jumps there
+  // instead of pushing a second TripDetail copy inside the Profile stack (#48).
+  function openTrip(tripId: string) {
+    const tabNav = navigation.getParent<NavigationProp<AppTabParamList>>();
+    tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId } });
   }
 
   function handleSignOut() {
@@ -196,7 +203,12 @@ export function ProfileScreen({ navigation }: Props) {
           </View>
         ) : (
           experiences.map((item, i) => (
-            <View key={item.id} style={styles.row}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.row}
+              onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
+              activeOpacity={0.7}
+            >
               <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
@@ -206,7 +218,8 @@ export function ProfileScreen({ navigation }: Props) {
                   <AppText variant="caption" numberOfLines={1} style={styles.rowPlace}>{localityLabel(item)}</AppText>
                 )}
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+            </TouchableOpacity>
           ))
         )}
 
@@ -222,7 +235,7 @@ export function ProfileScreen({ navigation }: Props) {
               <TouchableOpacity
                 key={trip.id}
                 style={styles.tripCard}
-                onPress={() => navigation.navigate('TripDetail', { tripId: trip.id })}
+                onPress={() => openTrip(trip.id)}
                 activeOpacity={0.85}
               >
                 {trip.cover_photo ? (
