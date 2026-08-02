@@ -15,9 +15,6 @@ import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
-import {
-  ExperienceFilterChips, ExperienceFilter, ALL_FILTER, matchesExperienceFilter,
-} from '@/components/ExperienceFilters';
 import { AppText } from '@/components/ui/AppText';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -71,8 +68,6 @@ export function MyListScreen({ navigation }: Props) {
   const [tab, setTab] = useState<ListTab>('ranked');
   // List vs map only applies to the Ranked tab (your own "everywhere I've been").
   const [rankedView, setRankedView] = useState<RankedView>('list');
-  // City/tag view filter over the ranked list + map (#62). Positions stay global.
-  const [filter, setFilter] = useState<ExperienceFilter>(ALL_FILTER);
 
   const { data: items = [], isLoading: loadingItems, refetch: refetchItems, isRefetching: refItems } = useQuery({
     queryKey: qk.myExperiences,
@@ -94,19 +89,10 @@ export function MyListScreen({ navigation }: Props) {
     useCallback(() => () => {
       setTab('ranked');
       setRankedView('list');
-      setFilter(ALL_FILTER);
     }, []),
   );
 
-  // Filtered view of the ranked list; rows keep their GLOBAL position (#N overall),
-  // so the ranking reads the same with or without a filter.
-  const filtered = useMemo(
-    () => items.filter((e) => matchesExperienceFilter(e, filter)),
-    [items, filter],
-  );
-  const positions = useMemo(() => new Map(items.map((e, i) => [e.id, i + 1])), [items]);
-
-  const pins = useMemo(() => filtered.filter(hasValidCoords), [filtered]);
+  const pins = useMemo(() => items.filter(hasValidCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
   // Optimistic unsave; reverts on error.
@@ -198,11 +184,6 @@ export function MyListScreen({ navigation }: Props) {
         />
       </View>
 
-      {/* City/tag view filter — applies to the ranked list AND its map pins. */}
-      {tab === 'ranked' && items.length > 0 && (
-        <ExperienceFilterChips items={items} value={filter} onChange={setFilter} />
-      )}
-
       {showMap ? (
         <MapView style={styles.map} initialRegion={region}>
           {pins.map((item) => (
@@ -226,7 +207,7 @@ export function MyListScreen({ navigation }: Props) {
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
           >
-            {filtered.map((item) => (
+            {items.map((item, i) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.row}
@@ -234,7 +215,7 @@ export function MyListScreen({ navigation }: Props) {
                 activeOpacity={0.7}
               >
                 <View style={styles.rankBadge}>
-                  <AppText variant="body" weight="bold" color={COLORS.brand}>{positions.get(item.id)}</AppText>
+                  <AppText variant="body" weight="bold" color={COLORS.brand}>{i + 1}</AppText>
                 </View>
                 <View style={styles.info}>
                   <AppText variant="body" weight="semibold" numberOfLines={1}>

@@ -79,7 +79,6 @@ src/
     UserRow.tsx             # user row w/ follow button (FindPeople, FollowList)
     SuggestedUsers.tsx      # horizontal user cards w/ Follow ("Suggested for you")
     LocationSearch.tsx      # debounced Places autocomplete + select
-    ExperienceFilters.tsx   # city/tag view-filter chips over a ranked list (MyList, UserProfile)
     README.md               # design-system usage guide
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
@@ -180,12 +179,13 @@ Experiences and Profile stacks.
 `graduate` (Rank on a planned stop opens it prefilled — add photos/take/tags/confirm the
 date, then rank; the save updates the row in place), and `edit` (registered as
 `EditExperience` modal in the Feed/Experiences/Profile stacks — owner content edits via
-`updateExperience`; sentiment/rank_key are never editable here — moving in the list is the
-**re-rank flow**: ExperienceDetail's swap icon re-runs `RankExperience` on the existing row
-with `rerank: true`, which excludes the row from its own comparison pool and updates ONLY
-sentiment + rank_key via `rerankExperience`). Owners can also **delete** from
-ExperienceDetail (`deleteExperience`; saves cascade, positions self-heal since they derive
-from rank_key order).
+`updateExperience`; sentiment/rank_key are never editable here). Re-rank machinery exists —
+`RankExperience` with `rerank: true` excludes the row from its own comparison pool and
+updates ONLY sentiment + rank_key via `rerankExperience` — but it deliberately has NO
+user-facing entry point: on-demand re-ranking was cut as a product decision, and the
+planned periodic check-in flow ("does it still hold up?") will be its only driver. Owners
+can also **delete** from ExperienceDetail (`deleteExperience`; saves cascade, positions
+self-heal since they derive from rank_key order).
 Finishing any rank flow **resets the Log stack to LogHome** and jumps to where the result
 is visible (the trip's itinerary if the log belongs to a trip — re-ranks always go to the
 ranked list — else the Experiences ranked list) — plain `popToTop()` breaks when the flow

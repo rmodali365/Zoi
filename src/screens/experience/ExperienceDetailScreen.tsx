@@ -7,7 +7,6 @@ import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ExperienceDraft } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji, sentimentLabel,
@@ -70,27 +69,6 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
       Alert.alert('Could not delete', e instanceof Error ? e.message : 'Try again.'),
   });
 
-  // Re-rank (#61): re-run the sentiment + comparison flow against this row.
-  // Only sentiment/rank_key change — the draft is just what the flow displays.
-  function startRerank() {
-    if (!exp) return;
-    const draft: ExperienceDraft = {
-      title: experienceTitle(exp),
-      locations: exp.locations?.length ? exp.locations : exp.location ? [exp.location] : [],
-      tags: exp.tags,
-      photos: exp.photos,
-      quick_take: exp.quick_take,
-      trip_id: exp.trip_id,
-      experience_date: exp.experience_date,
-    };
-    // Cross-tab: the rank flow lives in the Log stack (same pattern TripDetail
-    // uses to graduate a planned stop).
-    navigation.navigate('Log', {
-      screen: 'RankExperience',
-      params: { draft, experienceId, rerank: true },
-    } as object);
-  }
-
   function confirmDelete() {
     Alert.alert(
       'Delete this experience?',
@@ -146,11 +124,6 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
         </TouchableOpacity>
         {isMine ? (
           <View style={styles.ownerActions}>
-            {ranked && (
-              <TouchableOpacity onPress={startRerank} hitSlop={8} activeOpacity={0.7}>
-                <Ionicons name="swap-vertical" size={22} color={COLORS.brand} />
-              </TouchableOpacity>
-            )}
             <TouchableOpacity
               onPress={() => navigation.navigate('EditExperience', { experienceId })}
               hitSlop={8}

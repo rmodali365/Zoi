@@ -138,6 +138,9 @@ export type LogStackParamList = {
   // experienceId set when the flow operates on an existing row instead of
   // inserting: graduating a planned stop, or (with rerank) re-ranking an
   // already-ranked experience — sentiment + rank_key move, content stays.
+  // NOTE: rerank has no user-facing entry point BY DESIGN — on-demand re-ranking
+  // was cut; the planned periodic check-in flow ("does it still hold up?") will
+  // be the only driver.
   RankExperience: { draft: ExperienceDraft; experienceId?: string; rerank?: boolean };
   StartTrip: undefined;
 };
