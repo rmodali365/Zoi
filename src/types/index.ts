@@ -144,6 +144,7 @@ export type LogStackParamList = {
 export type FeedStackParamList = {
   FeedHome: undefined;
   FindPeople: undefined;
+  Activity: undefined;
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
   TripDetail: { tripId: string };

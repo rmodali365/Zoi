@@ -35,22 +35,51 @@ export async function getFollowingIds(): Promise<Set<string>> {
   return new Set((data ?? []).map((r: { following_id: string }) => r.following_id));
 }
 
-// Simple "who to follow" suggestions: users the current user doesn't already follow.
+// "Who to follow" suggestions: friends-of-friends first (people followed by the
+// people you follow, ranked by how many of your follows follow them), topped up
+// with recent users when that isn't enough (#60).
 export async function getSuggestedUsers(limit = 12): Promise<UserResult[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
   const following = await getFollowingIds();
+  const suggestions: UserResult[] = [];
 
-  const { data } = await supabase
-    .from('users')
-    .select('id, name, handle, avatar_url')
-    .neq('id', user.id)
-    .limit(50);
+  if (following.size > 0) {
+    const { data: fof } = await supabase
+      .from('follows')
+      .select('following:users!follows_following_id_fkey(id, name, handle, avatar_url)')
+      .in('follower_id', [...following]);
 
-  return ((data ?? []) as UserResult[])
-    .filter((u) => !following.has(u.id))
-    .slice(0, limit);
+    // Count how many of my follows follow each candidate; more mutuals ranks higher.
+    const counts = new Map<string, { user: UserResult; n: number }>();
+    for (const row of fof ?? []) {
+      const u = (row as unknown as { following: UserResult | null }).following;
+      if (!u || u.id === user.id || following.has(u.id)) continue;
+      const entry = counts.get(u.id) ?? { user: u, n: 0 };
+      entry.n += 1;
+      counts.set(u.id, entry);
+    }
+    suggestions.push(
+      ...[...counts.values()].sort((a, b) => b.n - a.n).map((e) => e.user),
+    );
+  }
+
+  // Top up with recent users the pool didn't already produce.
+  if (suggestions.length < limit) {
+    const seen = new Set(suggestions.map((u) => u.id));
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, handle, avatar_url')
+      .neq('id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    for (const u of (data ?? []) as UserResult[]) {
+      if (!following.has(u.id) && !seen.has(u.id)) suggestions.push(u);
+    }
+  }
+
+  return suggestions.slice(0, limit);
 }
 
 // Follower (people who follow `userId`) and following (people `userId` follows) counts.

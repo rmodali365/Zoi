@@ -8,4 +8,7 @@ export const qk = {
   myProfile: ['profile', 'me'] as const,
   trip: (id: string) => ['trip', id] as const,
   experience: (id: string) => ['experience', id] as const,
+  notifications: ['notifications'] as const,
+  notificationsUnread: ['notifications', 'unread'] as const,
+  saveCounts: (ids: string[]) => ['save-counts', ids] as const,
 };
