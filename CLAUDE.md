@@ -25,7 +25,8 @@ Solo project, built to move fast.
 - **Images:** expo-image-picker → uploaded to Supabase Storage via `src/lib/storage.ts`
   (expo-file-system `File.bytes()`). Buckets: `experience-photos` (at log-save) and `avatars`
   (profile pic). Both public, per-user folder RLS (`<uid>/...`).
-- Installed but not yet wired: expo-contacts (planned contacts-invite flow).
+- **Contacts:** expo-contacts + expo-crypto — phone numbers are SHA-256 hashed on device
+  and matched by the `match-contacts` Edge Function (raw numbers never leave the phone).
 
 ## Running
 
@@ -61,6 +62,11 @@ src/
                             #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
     follows.ts              # search users, follow/unfollow, counts, lists, getSuggestedUsers
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
+    saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
+                            #   getSaveCounts (aggregate-only, via save_counts definer fn)
+    notifications.ts        # in-app activity: follow/save events (written by DB triggers)
+    contacts.ts             # contacts -> Zoi users: hash phones on device, match server-side
+    share.ts                # shareProfile() — native share sheet w/ zoi:// deep link
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors
     share.ts                # shareProfile() — share sheet w/ https link (link Edge Function)
     places.ts               # client wrapper for the `places` Edge Function
@@ -97,8 +103,10 @@ src/
     ProfileNavigator.tsx    # ProfileHome, TripDetail, UserProfile, FollowList, EditProfile (modal)
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
-    feed/FeedScreen.tsx     # followed users' experiences; pull-to-refresh, save, Find friends
-    feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow
+    feed/FeedScreen.tsx     # followed users' experiences; pull-to-refresh, save, Find friends,
+                            #   activity bell (unread dot)
+    feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow, contacts matching + invite
+    feed/ActivityScreen.tsx # in-app notifications (follows + saves); opening clears the badge
     list/MyListScreen.tsx   # Experiences tab: Ranked (list/map toggle) / Trips / Wishlist subtabs
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
     experience/ExperienceDetailScreen.tsx  # read-only full view (carousel, rank, map); all stacks
@@ -115,6 +123,7 @@ supabase/
   config.toml               # project ref + function config (verify_jwt)
   functions/
     places/index.ts         # Deno Edge Function: Google Places proxy (key server-side)
+    match-contacts/index.ts # phone-hash contact matching (service role, hashes only in transit)
     link/index.ts           # public (verify_jwt=false) share-link landing page: opens the
                             #   app via zoi:// or shows a get-the-app fallback
 ```

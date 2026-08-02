@@ -34,3 +34,14 @@ export function formatDay(s: string): string {
 export function daysBetween(a: string, b: string): number {
   return Math.round((fromDateString(b).getTime() - fromDateString(a).getTime()) / 86400000);
 }
+
+// Compact age of an ISO instant (created_at timestamps, not date-only strings):
+// "now" / "5m" / "3h" / "2d", falling back to the calendar day when older.
+export function timeAgo(iso: string): string {
+  const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return 'now';
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
+  if (secs < 7 * 86400) return `${Math.floor(secs / 86400)}d`;
+  return formatDay(toDateString(new Date(iso)));
+}

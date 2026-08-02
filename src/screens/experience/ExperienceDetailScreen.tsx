@@ -14,7 +14,7 @@ import {
 import { formatDay } from '@/lib/dates';
 import { getExperience, deleteExperience } from '@/lib/experiences';
 import { getMyProfile } from '@/lib/me';
-import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
+import { getSavedIds, getSaveCounts, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
 import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
@@ -49,6 +49,14 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
 
   const isMine = !!exp && !!profile && exp.user_id === profile.id;
   const saved = !!exp && savedIds.has(exp.id);
+
+  // Author-side feedback (#59): how many people saved this to their Want-to-do.
+  const { data: saveCounts = {} } = useQuery({
+    queryKey: qk.saveCounts([experienceId]),
+    queryFn: () => getSaveCounts([experienceId]),
+    enabled: isMine,
+  });
+  const saveCount = saveCounts[experienceId] ?? 0;
 
   const toggleSave = useMutation({
     mutationFn: () => (saved ? unsaveExperience(experienceId) : saveExperience(experienceId)),
@@ -230,6 +238,16 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             </View>
           )}
 
+          {/* Author-only: aggregate save count (never who) — the reward for posting. */}
+          {isMine && saveCount > 0 && (
+            <View style={styles.saveCountRow}>
+              <Ionicons name="bookmark" size={15} color={COLORS.brand} />
+              <AppText variant="subhead" color={COLORS.textSecondary}>
+                {saveCount === 1 ? '1 person wants' : `${saveCount} people want`} to do this
+              </AppText>
+            </View>
+          )}
+
           {/* Quick take */}
           {!!exp.quick_take && (
             <AppText variant="body" style={styles.quote}>“{exp.quick_take}”</AppText>
@@ -343,6 +361,7 @@ const styles = StyleSheet.create({
   rankEmoji: { fontSize: 26 },
   rankInfo: { flex: 1 },
   quote: { fontStyle: 'italic', lineHeight: 22 },
+  saveCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   tag: {
     backgroundColor: COLORS.accentLight, borderRadius: RADIUS.full,
