@@ -5,3 +5,6 @@ verify_jwt = true
 
 [functions.match-contacts]
 verify_jwt = true
+# Public share-link landing page — recipients aren't signed in.
+[functions.link]
+verify_jwt = false

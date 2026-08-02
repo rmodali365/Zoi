@@ -16,6 +16,7 @@ import { getExperience, deleteExperience } from '@/lib/experiences';
 import { getMyProfile } from '@/lib/me';
 import { getSavedIds, getSaveCounts, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
+import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -36,6 +37,8 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
   const [photoIndex, setPhotoIndex] = useState(0);
+  // Visitor "add to my trip" — copies this experience as a planned stop (#58).
+  const [addingToTrip, setAddingToTrip] = useState(false);
 
   const { data: exp, isLoading } = useQuery({
     queryKey: qk.experience(experienceId),
@@ -145,15 +148,22 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
                 : <Ionicons name="trash-outline" size={22} color={COLORS.error} />}
             </TouchableOpacity>
           </View>
-        ) : ranked ? (
-          <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
-            <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={22}
-              color={saved ? COLORS.brand : COLORS.text}
-            />
-          </TouchableOpacity>
-        ) : null}
+        ) : (
+          <View style={styles.visitorActions}>
+            {ranked && (
+              <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={22}
+                  color={saved ? COLORS.brand : COLORS.text}
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setAddingToTrip(true)} hitSlop={8} activeOpacity={0.7}>
+              <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -307,6 +317,8 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
           )}
         </View>
       </ScrollView>
+
+      <TripPickerSheet item={addingToTrip ? exp : null} onClose={() => setAddingToTrip(false)} />
     </SafeAreaView>
   );
 }
@@ -320,6 +332,7 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingBottom: SPACING.xxl },
   ownerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  visitorActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   photo: { height: PHOTO_HEIGHT, backgroundColor: COLORS.border },
   dots: {
     flexDirection: 'row', justifyContent: 'center', gap: 6,

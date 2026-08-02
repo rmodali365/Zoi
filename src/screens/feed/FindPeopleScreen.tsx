@@ -13,7 +13,7 @@ import { shareProfile } from '@/lib/share';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserRow } from '@/components/UserRow';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -178,33 +178,17 @@ export function FindPeopleScreen({ navigation }: Props) {
             <AppText variant="body" color={COLORS.textMuted} style={styles.emptyText}>No one found for “{query.trim()}”.</AppText>
           ) : null
         }
-        renderItem={({ item }) => {
-          const isFollowing = following.has(item.id);
-          const isPending = pending.has(item.id);
-          return (
-            <TouchableOpacity
-              style={styles.row}
-              onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
-              activeOpacity={0.7}
-            >
-              <Avatar uri={item.avatar_url} size={44} />
-              <View style={styles.info}>
-                <AppText variant="body" weight="semibold" numberOfLines={1}>{item.name}</AppText>
-                <AppText variant="subhead" weight="regular" color={COLORS.textMuted} numberOfLines={1}>@{item.handle}</AppText>
-              </View>
-              <TouchableOpacity
-                style={[styles.followBtn, isFollowing && styles.followingBtn]}
-                onPress={() => toggleFollow(item.id)}
-                disabled={isPending}
-                activeOpacity={0.8}
-              >
-                <AppText variant="subhead" weight="semibold" color={isFollowing ? COLORS.text : COLORS.background}>
-                  {isFollowing ? 'Following' : 'Follow'}
-                </AppText>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          );
-        }}
+        renderItem={({ item }) => (
+          <UserRow
+            name={item.name}
+            handle={item.handle}
+            avatarUrl={item.avatar_url}
+            onPress={() => navigation.navigate('UserProfile', { userId: item.id })}
+            following={following.has(item.id)}
+            onToggleFollow={() => toggleFollow(item.id)}
+            followDisabled={pending.has(item.id)}
+          />
+        )}
       />
     </SafeAreaView>
   );
