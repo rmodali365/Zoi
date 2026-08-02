@@ -6,17 +6,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { User, Experience, Trip } from '@/types';
 import { getUserProfile } from '@/lib/users';
+import { getMyUserId } from '@/lib/auth';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { shareProfile } from '@/lib/share';
-import { getFollowCounts } from '@/lib/follows';
+import { getFollowCounts, getFollowingIds, followUser, unfollowUser } from '@/lib/follows';
+import { queryClient } from '@/lib/queryClient';
+import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
+import { FollowButton } from '@/components/ui/FollowButton';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 const TRIP_CARD = 140;
 
-// Read-only profile for another user. Reachable from the feed author and suggested/find
-// people. Nothing inside is interactive in v1.
+// Profile for another user: browse their ranked list + trips, follow/unfollow,
+// share. This is where the shared deep link (zoi://user/<id>) lands, so the
+// follow button here closes the share → follow loop (#55).
 export function UserProfileScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ UserProfile: { userId: string } }, 'UserProfile'>>();
@@ -27,21 +32,45 @@ export function UserProfileScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
+  const [myId, setMyId] = useState<string | null>(null);
+  const [following, setFollowing] = useState(false);
+  const [followPending, setFollowPending] = useState(false);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getUserProfile(userId), getFollowCounts(userId)])
-      .then(([data, followCounts]) => {
+    Promise.all([getUserProfile(userId), getFollowCounts(userId), getMyUserId(), getFollowingIds()])
+      .then(([data, followCounts, me, followingIds]) => {
         if (!active) return;
         setProfile(data.profile);
         setExperiences(data.experiences);
         setTrips(data.trips);
         setCounts(followCounts);
+        setMyId(me);
+        setFollowing(followingIds.has(userId));
       })
       .catch(() => {})
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [userId]);
+
+  async function toggleFollow() {
+    const wasFollowing = following;
+    setFollowPending(true);
+    // Optimistic: flip the button and the follower count together.
+    setFollowing(!wasFollowing);
+    setCounts((c) => ({ ...c, followers: Math.max(0, c.followers + (wasFollowing ? -1 : 1)) }));
+    try {
+      if (wasFollowing) await unfollowUser(userId);
+      else await followUser(userId);
+      // Feed depends on who you follow — refresh it next time it's shown.
+      queryClient.invalidateQueries({ queryKey: qk.feed });
+    } catch {
+      setFollowing(wasFollowing);
+      setCounts((c) => ({ ...c, followers: Math.max(0, c.followers + (wasFollowing ? 1 : -1)) }));
+    } finally {
+      setFollowPending(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -70,6 +99,9 @@ export function UserProfileScreen() {
             <AppText variant="title">{profile?.name ?? 'User'}</AppText>
             <AppText variant="subhead" weight="regular" color={COLORS.textMuted} style={styles.handle}>@{profile?.handle ?? 'handle'}</AppText>
           </View>
+          {!!myId && myId !== userId && (
+            <FollowButton following={following} onPress={toggleFollow} disabled={followPending} />
+          )}
         </View>
 
         {/* Follower / following counts */}

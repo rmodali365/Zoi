@@ -2,3 +2,7 @@ project_id = "ckfpzzddogzdbjtxmahq"
 
 [functions.places]
 verify_jwt = true
+
+# Public share-link landing page — recipients aren't signed in.
+[functions.link]
+verify_jwt = false
