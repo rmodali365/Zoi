@@ -135,15 +135,17 @@ export type LogStackParamList = {
   // tripId: preset trip when logging from a trip. graduateExperienceId: capture step
   // for ranking an existing planned stop — prefills from that row (#51).
   AddExperience: { tripId?: string; graduateExperienceId?: string } | undefined;
-  // experienceId set when ranking ("graduating") an existing planned trip stop —
-  // save updates that row in place instead of inserting a new experience.
-  RankExperience: { draft: ExperienceDraft; experienceId?: string };
+  // experienceId set when the flow operates on an existing row instead of
+  // inserting: graduating a planned stop, or (with rerank) re-ranking an
+  // already-ranked experience — sentiment + rank_key move, content stays.
+  RankExperience: { draft: ExperienceDraft; experienceId?: string; rerank?: boolean };
   StartTrip: undefined;
 };
 
 export type FeedStackParamList = {
   FeedHome: undefined;
   FindPeople: undefined;
+  Search: undefined;
   UserProfile: { userId: string };
   FollowList: { userId: string; mode: 'followers' | 'following' };
   TripDetail: { tripId: string };

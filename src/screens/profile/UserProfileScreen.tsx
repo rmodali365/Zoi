@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
@@ -9,6 +9,9 @@ import { getUserProfile } from '@/lib/users';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { shareProfile } from '@/lib/share';
 import { getFollowCounts } from '@/lib/follows';
+import {
+  ExperienceFilterChips, ExperienceFilter, ALL_FILTER, matchesExperienceFilter,
+} from '@/components/ExperienceFilters';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -27,6 +30,14 @@ export function UserProfileScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
+  // City/tag view filter over their ranked list (#62); positions stay global.
+  const [filter, setFilter] = useState<ExperienceFilter>(ALL_FILTER);
+
+  const filtered = useMemo(
+    () => experiences.filter((e) => matchesExperienceFilter(e, filter)),
+    [experiences, filter],
+  );
+  const positions = useMemo(() => new Map(experiences.map((e, i) => [e.id, i + 1])), [experiences]);
 
   useEffect(() => {
     let active = true;
@@ -98,19 +109,25 @@ export function UserProfileScreen() {
           {experiences.length} {experiences.length === 1 ? 'experience' : 'experiences'}
         </AppText>
 
+        {experiences.length > 0 && (
+          <View style={styles.filterWrap}>
+            <ExperienceFilterChips items={experiences} value={filter} onChange={setFilter} />
+          </View>
+        )}
+
         {experiences.length === 0 ? (
           <View style={styles.empty}>
             <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>No experiences yet.</AppText>
           </View>
         ) : (
-          experiences.map((item, i) => (
+          filtered.map((item) => (
             <TouchableOpacity
               key={item.id}
               style={styles.row}
               onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
               activeOpacity={0.7}
             >
-              <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
+              <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{positions.get(item.id)}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
                   {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
@@ -190,6 +207,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.5,
     paddingHorizontal: SPACING.xl, marginBottom: SPACING.sm,
   },
+  filterWrap: { marginBottom: SPACING.xs },
   tripsTitle: { marginTop: SPACING.lg },
   tripRow: { paddingHorizontal: SPACING.xl, gap: SPACING.sm, marginBottom: SPACING.lg },
   tripCard: { width: TRIP_CARD },

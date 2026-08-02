@@ -9,7 +9,9 @@ import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/co
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { experienceTitle } from '@/lib/experienceDisplay';
 import { getMyUserId } from '@/lib/auth';
-import { getRankedExperiences, insertRankedExperience, graduatePlannedStop } from '@/lib/experiences';
+import {
+  getRankedExperiences, insertRankedExperience, graduatePlannedStop, rerankExperience,
+} from '@/lib/experiences';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
@@ -21,7 +23,7 @@ type Props = {
 };
 
 export function RankExperienceScreen({ navigation, route }: Props) {
-  const { draft, experienceId } = route.params;
+  const { draft, experienceId, rerank } = route.params;
 
   const [phase, setPhase] = useState<'sentiment' | 'comparing' | 'saving'>('sentiment');
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
@@ -41,8 +43,10 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
 
     // Load the FULL ranked list — ranking is one overall list per user now.
-    // Planned trip stops are excluded; only ranked experiences are comparison candidates.
-    const existing = await getRankedExperiences(userId);
+    // Planned trip stops are excluded; only ranked experiences are comparison
+    // candidates. When re-ranking, the row being moved leaves the pool so it
+    // can't be compared against itself.
+    const existing = (await getRankedExperiences(userId)).filter((e) => e.id !== experienceId);
 
     if (existing.length === 0) {
       // Very first experience — auto #1.
@@ -102,7 +106,9 @@ export function RankExperienceScreen({ navigation, route }: Props) {
   function finish() {
     navigation.reset({ index: 0, routes: [{ name: 'LogHome' }] });
     const tabNav = navigation.getParent<NavigationProp<AppTabParamList>>();
-    if (draft.trip_id) {
+    // Re-ranking is about the list, not the trip — always land on the ranked
+    // list so the new position is visible.
+    if (draft.trip_id && !rerank) {
       tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id } });
     } else {
       tabNav?.navigate('List', { screen: 'ExperiencesHome' });
@@ -121,6 +127,16 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     };
 
     try {
+      if (experienceId && rerank) {
+        // Re-ranking: only sentiment + rank_key move; content stays untouched.
+        await rerankExperience({ experienceId, sentiment: s, rankKey });
+        invalidate();
+        queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
+        Alert.alert('Re-ranked!', `${draft.title} now sits at #${pos + 1} of ${total}.`,
+          [{ text: 'Done', onPress: finish }]);
+        return;
+      }
+
       if (experienceId) {
         // Graduating an existing planned stop: flip it to ranked in place (keeping
         // trip membership + position) and persist everything captured on the way.
@@ -213,7 +229,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         <View style={styles.compareRow}>
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(true)} activeOpacity={0.85}>
             <AppText variant="headline" weight="semibold" style={styles.compareName}>{draft.title}</AppText>
-            <AppText variant="footnote" style={styles.compareTag}>New</AppText>
+            <AppText variant="footnote" style={styles.compareTag}>{rerank ? 'Moving' : 'New'}</AppText>
           </TouchableOpacity>
 
           <AppText variant="subhead" weight="medium" color={COLORS.textMuted}>vs</AppText>

@@ -63,9 +63,14 @@ export function FeedScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <AppText variant="title" style={styles.wordmark}>Zoi</AppText>
-        <TouchableOpacity onPress={() => navigation.navigate('FindPeople')} hitSlop={8}>
-          <Ionicons name="person-add-outline" size={22} color={COLORS.text} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => navigation.navigate('Search')} hitSlop={8}>
+            <Ionicons name="search-outline" size={22} color={COLORS.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('FindPeople')} hitSlop={8}>
+            <Ionicons name="person-add-outline" size={22} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isLoading ? (
@@ -129,6 +134,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   wordmark: { fontSize: 22, letterSpacing: -0.5 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { flexGrow: 1, padding: SPACING.xl },
   empty: {
