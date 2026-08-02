@@ -17,15 +17,16 @@ import {
 import {
   getTripDetail, groupByCity, groupByDay, addPlannedStop, removeTripItem,
   setTripPosition, nextTripPosition, positionToMoveUp, positionToMoveDown,
-  copyStopToTrip, forkTrip, updateTrip, parseDateInput,
+  forkTrip, updateTrip, parseDateInput,
 } from '@/lib/trips';
 import { todayString } from '@/lib/dates';
-import { getMyProfile, getMyTrips } from '@/lib/me';
+import { getMyProfile } from '@/lib/me';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { getMyUserId } from '@/lib/auth';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
+import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { DateField } from '@/components/ui/DateField';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -108,7 +109,6 @@ export function TripDetailScreen({ navigation, route }: Props) {
   });
   const { data: profile } = useQuery({ queryKey: qk.myProfile, queryFn: getMyProfile });
   const { data: savedIds = new Set<string>() } = useQuery({ queryKey: qk.savedIds, queryFn: getSavedIds });
-  const { data: myTrips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
 
   // Refetch on focus so items added/edited elsewhere show up on return.
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
@@ -190,18 +190,6 @@ export function TripDetailScreen({ navigation, route }: Props) {
       queryClient.invalidateQueries({ queryKey: qk.savedIds });
       queryClient.invalidateQueries({ queryKey: qk.saves });
     },
-  });
-
-  // Visitor: copy a stop into one of your own trips as a planned stop.
-  const copyStop = useMutation({
-    mutationFn: ({ item, toTripId }: { item: Experience; toTripId: string }) =>
-      copyStopToTrip(item, toTripId),
-    onSuccess: (_d, vars) => {
-      queryClient.invalidateQueries({ queryKey: qk.trip(vars.toTripId) });
-      setPickerItem(null);
-      Alert.alert('Added to your trip', 'Saved as a planned stop you can rank later.');
-    },
-    onError: (e: unknown) => Alert.alert('Could not add', e instanceof Error ? e.message : 'Try again.'),
   });
 
   function closeAdd() {
@@ -487,38 +475,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
       </Modal>
 
       {/* Visitor "add to my trip" picker */}
-      <Modal visible={!!pickerItem} animationType="slide" transparent onRequestClose={() => setPickerItem(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <AppText variant="title">Add to which trip?</AppText>
-              <TouchableOpacity onPress={() => setPickerItem(null)} hitSlop={8}>
-                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            {myTrips.length === 0 ? (
-              <AppText variant="body" color={COLORS.textSecondary} style={styles.pickerEmpty}>
-                You don’t have any trips yet. Start one from the Log tab first.
-              </AppText>
-            ) : (
-              <ScrollView style={styles.pickerList}>
-                {myTrips.map((t) => (
-                  <TouchableOpacity
-                    key={t.id}
-                    style={styles.pickerRow}
-                    onPress={() => pickerItem && copyStop.mutate({ item: pickerItem, toTripId: t.id })}
-                    disabled={copyStop.isPending}
-                    activeOpacity={0.7}
-                  >
-                    <AppText variant="body" weight="semibold">{t.title}</AppText>
-                    {!!t.destination && <AppText variant="caption" color={COLORS.textSecondary} style={styles.pickerRowDest}>{t.destination}</AppText>}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal>
+      <TripPickerSheet item={pickerItem} onClose={() => setPickerItem(null)} />
 
       {/* Edit trip details (owner) */}
       <Modal visible={editingTrip} animationType="slide" transparent onRequestClose={() => setEditingTrip(false)}>
@@ -734,12 +691,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md, alignItems: 'center',
   },
   logLink: { alignItems: 'center', paddingVertical: SPACING.sm },
-  pickerEmpty: { lineHeight: 22, paddingVertical: SPACING.md },
-  pickerList: { maxHeight: 320 },
-  pickerRow: {
-    paddingVertical: SPACING.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
-  },
-  pickerRowDest: { marginTop: 1 },
   editForm: { gap: SPACING.md, paddingTop: SPACING.sm },
   coverPicker: { borderRadius: RADIUS.md, overflow: 'hidden' },
   editCover: { width: '100%', height: 140, borderRadius: RADIUS.md, backgroundColor: COLORS.border },
