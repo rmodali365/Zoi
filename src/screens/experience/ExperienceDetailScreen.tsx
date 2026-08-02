@@ -14,8 +14,9 @@ import {
 import { formatDay } from '@/lib/dates';
 import { getExperience, deleteExperience } from '@/lib/experiences';
 import { getMyProfile } from '@/lib/me';
-import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
+import { getSavedIds, getSaveCounts, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
+import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -36,6 +37,8 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
   const [photoIndex, setPhotoIndex] = useState(0);
+  // Visitor "add to my trip" — copies this experience as a planned stop (#58).
+  const [addingToTrip, setAddingToTrip] = useState(false);
 
   const { data: exp, isLoading } = useQuery({
     queryKey: qk.experience(experienceId),
@@ -46,6 +49,14 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
 
   const isMine = !!exp && !!profile && exp.user_id === profile.id;
   const saved = !!exp && savedIds.has(exp.id);
+
+  // Author-side feedback (#59): how many people saved this to their Want-to-do.
+  const { data: saveCounts = {} } = useQuery({
+    queryKey: qk.saveCounts([experienceId]),
+    queryFn: () => getSaveCounts([experienceId]),
+    enabled: isMine,
+  });
+  const saveCount = saveCounts[experienceId] ?? 0;
 
   const toggleSave = useMutation({
     mutationFn: () => (saved ? unsaveExperience(experienceId) : saveExperience(experienceId)),
@@ -137,15 +148,22 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
                 : <Ionicons name="trash-outline" size={22} color={COLORS.error} />}
             </TouchableOpacity>
           </View>
-        ) : ranked ? (
-          <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
-            <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={22}
-              color={saved ? COLORS.brand : COLORS.text}
-            />
-          </TouchableOpacity>
-        ) : null}
+        ) : (
+          <View style={styles.visitorActions}>
+            {ranked && (
+              <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={22}
+                  color={saved ? COLORS.brand : COLORS.text}
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setAddingToTrip(true)} hitSlop={8} activeOpacity={0.7}>
+              <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -220,6 +238,16 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             </View>
           )}
 
+          {/* Author-only: aggregate save count (never who) — the reward for posting. */}
+          {isMine && saveCount > 0 && (
+            <View style={styles.saveCountRow}>
+              <Ionicons name="bookmark" size={15} color={COLORS.brand} />
+              <AppText variant="subhead" color={COLORS.textSecondary}>
+                {saveCount === 1 ? '1 person wants' : `${saveCount} people want`} to do this
+              </AppText>
+            </View>
+          )}
+
           {/* Quick take */}
           {!!exp.quick_take && (
             <AppText variant="body" style={styles.quote}>“{exp.quick_take}”</AppText>
@@ -289,6 +317,8 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
           )}
         </View>
       </ScrollView>
+
+      <TripPickerSheet item={addingToTrip ? exp : null} onClose={() => setAddingToTrip(false)} />
     </SafeAreaView>
   );
 }
@@ -302,6 +332,7 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingBottom: SPACING.xxl },
   ownerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  visitorActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   photo: { height: PHOTO_HEIGHT, backgroundColor: COLORS.border },
   dots: {
     flexDirection: 'row', justifyContent: 'center', gap: 6,
@@ -330,6 +361,7 @@ const styles = StyleSheet.create({
   rankEmoji: { fontSize: 26 },
   rankInfo: { flex: 1 },
   quote: { fontStyle: 'italic', lineHeight: 22 },
+  saveCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
   tag: {
     backgroundColor: COLORS.accentLight, borderRadius: RADIUS.full,

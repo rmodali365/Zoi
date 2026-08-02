@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FeedStackParamList } from '@/types';
 import { getFeed, FeedEntry } from '@/lib/feed';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
+import { getUnreadCount } from '@/lib/notifications';
 import { qk } from '@/lib/queryKeys';
 import { ExperienceCard } from '@/components/ExperienceCard';
 import { TripFeedCard } from '@/components/TripFeedCard';
@@ -29,6 +30,10 @@ export function FeedScreen({ navigation }: Props) {
   const { data: savedIds = new Set<string>() } = useQuery({
     queryKey: qk.savedIds,
     queryFn: getSavedIds,
+  });
+  const { data: unread = 0 } = useQuery({
+    queryKey: qk.notificationsUnread,
+    queryFn: getUnreadCount,
   });
 
   // Optimistic bookmark toggle; reverts on error. Persisted to public.saves and the
@@ -57,6 +62,7 @@ export function FeedScreen({ navigation }: Props) {
   const onRefresh = useCallback(() => {
     refetch();
     queryClient.invalidateQueries({ queryKey: qk.savedIds });
+    queryClient.invalidateQueries({ queryKey: qk.notificationsUnread });
   }, [refetch, queryClient]);
 
   return (
@@ -66,6 +72,10 @@ export function FeedScreen({ navigation }: Props) {
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => navigation.navigate('Search')} hitSlop={8}>
             <Ionicons name="search-outline" size={22} color={COLORS.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Activity')} hitSlop={8}>
+            <Ionicons name="notifications-outline" size={22} color={COLORS.text} />
+            {unread > 0 && <View style={styles.unreadDot} />}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('FindPeople')} hitSlop={8}>
             <Ionicons name="person-add-outline" size={22} color={COLORS.text} />
@@ -135,6 +145,12 @@ const styles = StyleSheet.create({
   },
   wordmark: { fontSize: 22, letterSpacing: -0.5 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  unreadDot: {
+    position: 'absolute', top: -1, right: -2,
+    width: 9, height: 9, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.error,
+    borderWidth: 1.5, borderColor: COLORS.background,
+  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { flexGrow: 1, padding: SPACING.xl },
   empty: {

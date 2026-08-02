@@ -25,7 +25,8 @@ Solo project, built to move fast.
 - **Images:** expo-image-picker → uploaded to Supabase Storage via `src/lib/storage.ts`
   (expo-file-system `File.bytes()`). Buckets: `experience-photos` (at log-save) and `avatars`
   (profile pic). Both public, per-user folder RLS (`<uid>/...`).
-- Installed but not yet wired: expo-contacts (planned contacts-invite flow).
+- **Contacts:** expo-contacts + expo-crypto — phone numbers are SHA-256 hashed on device
+  and matched by the `match-contacts` Edge Function (raw numbers never leave the phone).
 
 ## Running
 
@@ -62,8 +63,11 @@ src/
                             #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
     follows.ts              # search users, follow/unfollow, counts, lists, getSuggestedUsers
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
-    saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors
-    share.ts                # shareProfile() — native share sheet w/ zoi:// deep link
+    saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
+                            #   getSaveCounts (aggregate-only, via save_counts definer fn)
+    notifications.ts        # in-app activity: follow/save events (written by DB triggers)
+    contacts.ts             # contacts -> Zoi users: hash phones on device, match server-side
+    share.ts                # shareProfile() — share sheet w/ https link (link Edge Function)
     places.ts               # client wrapper for the `places` Edge Function
     storage.ts              # uploadExperiencePhotos() + uploadAvatar() — local URIs -> public URLs
     ranking.ts              # fractional-index helpers (used by BOTH rank_key and trip_position)
@@ -71,7 +75,7 @@ src/
     queryClient.ts          # shared React Query client
     queryKeys.ts            # qk — centralized query keys (reads + invalidations can't drift)
   components/
-    ui/                     # primitives: AppText, Avatar, Card, Chip, SegmentedControl, DateField
+    ui/                     # primitives: AppText, Avatar, Card, Chip, SegmentedControl, DateField, FollowButton
     ExperienceCard.tsx      # feed card: author, photo, place, rank, tags, quick take, save button
     TripFeedCard.tsx        # feed card for a followed user's trip (cover + itinerary summary)
     ExperienceRow.tsx       # compact ranked-list row
@@ -79,6 +83,8 @@ src/
     UserRow.tsx             # user row w/ follow button (FindPeople, FollowList)
     SuggestedUsers.tsx      # horizontal user cards w/ Follow ("Suggested for you")
     LocationSearch.tsx      # debounced Places autocomplete + select
+    TripPickerSheet.tsx     # "Add to which trip?" sheet -> copyStopToTrip (TripDetail,
+                            #   ExperienceDetail, Wishlist)
     README.md               # design-system usage guide
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
@@ -96,8 +102,10 @@ src/
     ProfileNavigator.tsx    # ProfileHome, TripDetail, UserProfile, FollowList, EditProfile (modal)
   screens/
     auth/                   # Welcome, PhoneAuth, VerifyOtp, SetupProfile
-    feed/FeedScreen.tsx     # followed users' experiences; pull-to-refresh, save, Find friends
-    feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow
+    feed/FeedScreen.tsx     # followed users' experiences; pull-to-refresh, save, Find friends,
+                            #   activity bell (unread dot)
+    feed/FindPeopleScreen.tsx  # search users by name/@handle, follow/unfollow, contacts matching + invite
+    feed/ActivityScreen.tsx # in-app notifications (follows + saves); opening clears the badge
     list/MyListScreen.tsx   # Experiences tab: Ranked (list/map toggle) / Trips / Wishlist subtabs
     log/                    # LogScreen (home), AddExperience, RankExperience, StartTrip
     experience/ExperienceDetailScreen.tsx  # read-only full view (carousel, rank, map); all stacks
@@ -114,6 +122,9 @@ supabase/
   config.toml               # project ref + function config (verify_jwt)
   functions/
     places/index.ts         # Deno Edge Function: Google Places proxy (key server-side)
+    match-contacts/index.ts # phone-hash contact matching (service role, hashes only in transit)
+    link/index.ts           # public (verify_jwt=false) share-link landing page: opens the
+                            #   app via zoi:// or shows a get-the-app fallback
 ```
 
 ## Core concepts
@@ -162,7 +173,9 @@ trips work as inspiration: a friend going to the same place browses your profile
 - **follows a whole trip** (`forkTrip` — clones every stop as `planned` into a new trip
   they own; rankings/takes/photos stay behind), or
 - **saves an experience** to their Wishlist (`saves` table → Wishlist subtab), or
-- **shares a profile** via the native share sheet + `zoi://user/<id>` deep link (`lib/share.ts`).
+- **shares a profile** via the native share sheet (`lib/share.ts`) — an https link to the
+  public `link` Edge Function, which deep-links installed users into the app
+  (`zoi://user/<id>`) and shows a get-the-app fallback to everyone else.
 The Feed mixes followed users' ranked experiences and non-empty trips (newest first);
 experiences carry the author's rank position ("#3 of 41") — computed client-side in
 `getFeed()`. Tapping any experience anywhere opens the read-only **ExperienceDetail**

@@ -2,7 +2,8 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
-import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+import { FollowButton } from '@/components/ui/FollowButton';
+import { COLORS, SPACING } from '@/constants/theme';
 
 type Props = {
   name: string;
@@ -28,16 +29,7 @@ export function UserRow({
         <AppText variant="caption" numberOfLines={1}>@{handle}</AppText>
       </View>
       {onToggleFollow && (
-        <TouchableOpacity
-          style={[styles.followBtn, following && styles.followingBtn]}
-          onPress={onToggleFollow}
-          disabled={followDisabled}
-          activeOpacity={0.8}
-        >
-          <AppText variant="subhead" weight="semibold" color={following ? COLORS.text : COLORS.surface}>
-            {following ? 'Following' : 'Follow'}
-          </AppText>
-        </TouchableOpacity>
+        <FollowButton following={!!following} onPress={onToggleFollow} disabled={followDisabled} />
       )}
     </TouchableOpacity>
   );
@@ -50,9 +42,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
   },
   info: { flex: 1 },
-  followBtn: {
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 4,
-    borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
-  },
-  followingBtn: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
 });

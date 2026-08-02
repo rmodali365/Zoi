@@ -10,11 +10,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Experience, ExperiencesStackParamList } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
-import { getSaves, unsaveExperience } from '@/lib/saves';
+import { getSaves, getSaveCounts, unsaveExperience } from '@/lib/saves';
 import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
+import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -68,6 +69,8 @@ export function MyListScreen({ navigation }: Props) {
   const [tab, setTab] = useState<ListTab>('ranked');
   // List vs map only applies to the Ranked tab (your own "everywhere I've been").
   const [rankedView, setRankedView] = useState<RankedView>('list');
+  // Wishlist item being copied into one of your trips as a planned stop (#57).
+  const [tripPickerItem, setTripPickerItem] = useState<Experience | null>(null);
 
   const { data: items = [], isLoading: loadingItems, refetch: refetchItems, isRefetching: refItems } = useQuery({
     queryKey: qk.myExperiences,
@@ -94,6 +97,14 @@ export function MyListScreen({ navigation }: Props) {
 
   const pins = useMemo(() => items.filter(hasValidCoords), [items]);
   const region = useMemo(() => regionForPins(pins), [pins]);
+
+  // Aggregate "N people want to do this" badges on own rows (#59).
+  const itemIds = useMemo(() => items.map((i) => i.id), [items]);
+  const { data: saveCounts = {} } = useQuery({
+    queryKey: qk.saveCounts(itemIds),
+    queryFn: () => getSaveCounts(itemIds),
+    enabled: itemIds.length > 0,
+  });
 
   // Optimistic unsave; reverts on error.
   const unsave = useMutation({
@@ -230,6 +241,12 @@ export function MyListScreen({ navigation }: Props) {
                     </AppText>
                   )}
                 </View>
+                {(saveCounts[item.id] ?? 0) > 0 && (
+                  <View style={styles.saveCount}>
+                    <Ionicons name="bookmark" size={13} color={COLORS.brand} />
+                    <AppText variant="footnote" weight="semibold" color={COLORS.brand}>{saveCounts[item.id]}</AppText>
+                  </View>
+                )}
                 {item.photos.length > 0 && (
                   <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
                 )}
@@ -303,13 +320,21 @@ export function MyListScreen({ navigation }: Props) {
                   </AppText>
                 )}
               </View>
-              <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
-                <Ionicons name="bookmark" size={22} color={COLORS.brand} />
-              </TouchableOpacity>
+              <View style={styles.savedActions}>
+                <TouchableOpacity onPress={() => setTripPickerItem(item)} hitSlop={8} activeOpacity={0.7}>
+                  <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => unsave.mutate(item.id)} hitSlop={8} activeOpacity={0.7}>
+                  <Ionicons name="bookmark" size={22} color={COLORS.brand} />
+                </TouchableOpacity>
+              </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
       )}
+
+      {/* Saved → planned: copy a wishlist item into a trip you own. */}
+      <TripPickerSheet item={tripPickerItem} onClose={() => setTripPickerItem(null)} />
     </SafeAreaView>
   );
 }
@@ -370,12 +395,14 @@ const styles = StyleSheet.create({
   place: { marginTop: 1 },
   tags: { marginTop: 2 },
   thumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
+  saveCount: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   savedThumb: { width: 48, height: 48, borderRadius: RADIUS.sm, backgroundColor: COLORS.border },
   savedThumbPlaceholder: {
     backgroundColor: COLORS.accentLight,
     alignItems: 'center', justifyContent: 'center',
   },
   savedEmoji: { fontSize: 22 },
+  savedActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm + 2 },
   empty: { paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
   emptyTitle: { textAlign: 'center' },
   emptyBody: { textAlign: 'center', lineHeight: 22 },

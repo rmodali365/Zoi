@@ -37,6 +37,20 @@ export async function unsaveExperience(experienceId: string): Promise<void> {
   if (error) throw error;
 }
 
+// Aggregate save counts for a set of experiences ("N friends want to do this").
+// saves are owner-private, so this goes through the security-definer save_counts
+// function — it returns ONLY counts, never who saved (#59).
+export async function getSaveCounts(experienceIds: string[]): Promise<Record<string, number>> {
+  if (experienceIds.length === 0) return {};
+  const { data, error } = await supabase.rpc('save_counts', { exp_ids: experienceIds });
+  if (error) throw error;
+  const counts: Record<string, number> = {};
+  for (const row of (data ?? []) as { experience_id: string; saves: number }[]) {
+    counts[row.experience_id] = Number(row.saves);
+  }
+  return counts;
+}
+
 // The current user's want-to-do list: saved experiences with their author embedded.
 // Saves persist across unfollows: experiences are authenticated-public (public-profiles
 // RLS), so a saved experience stays readable even after unfollowing its author (#7).
