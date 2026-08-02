@@ -58,15 +58,113 @@ export async function getRankedExperiences(userId: string): Promise<Experience[]
   return (data ?? []) as Experience[];
 }
 
-// Graduate an existing planned stop: flip it to ranked in place, keeping its trip
-// membership, position, place, photos and note untouched.
-export async function graduatePlannedStop(
-  experienceId: string, sentiment: Sentiment, rankKey: string,
-): Promise<void> {
+// The append-to-end trip_position for a trip's itinerary (same fractional-index
+// convention as trips.ts: nulls fall back to rank_key for pre-itinerary rows).
+async function appendTripPosition(tripId: string): Promise<string> {
+  const { data: rows } = await supabase
+    .from('experiences')
+    .select('trip_position, rank_key')
+    .eq('trip_id', tripId);
+  const ps = (rows ?? [])
+    .map((r) => r.trip_position ?? r.rank_key)
+    .filter((p): p is string => !!p)
+    .sort();
+  return ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
+}
+
+// Upload any local photo URIs, keeping already-remote URLs; on upload failure the
+// caller is warned and only the already-remote photos are kept (save still succeeds).
+async function resolvePhotos(
+  userId: string, photos: string[], onPhotoError?: () => void,
+): Promise<string[]> {
+  try {
+    return await uploadExperiencePhotos(userId, photos);
+  } catch {
+    const hadLocal = photos.some((p) => !p.startsWith('http'));
+    if (hadLocal) onPhotoError?.();
+    return photos.filter((p) => p.startsWith('http'));
+  }
+}
+
+// Graduate an existing planned stop: flip it to ranked in place — keeping its trip
+// membership + position — and persist everything captured on the way (title, photos,
+// quick take, tags, date), so a graduated stop is a full experience (#51).
+export async function graduatePlannedStop(args: {
+  experienceId: string;
+  draft: ExperienceDraft;
+  sentiment: Sentiment;
+  rankKey: string;
+  onPhotoError?: () => void;
+}): Promise<void> {
+  const { experienceId, draft, sentiment, rankKey, onPhotoError } = args;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  const photos = await resolvePhotos(user.id, draft.photos, onPhotoError);
+
   const { error } = await supabase
     .from('experiences')
-    .update({ status: 'ranked', sentiment, rank_key: rankKey })
+    .update({
+      status: 'ranked',
+      sentiment,
+      rank_key: rankKey,
+      title: draft.title,
+      locations: draft.locations,
+      location: draft.locations[0] ?? null,
+      tags: draft.tags,
+      photos,
+      quick_take: draft.quick_take,
+      experience_date: draft.experience_date,
+    })
     .eq('id', experienceId);
+  if (error) throw error;
+}
+
+// Owner edit: update an experience's content (never its sentiment/rank_key — moving
+// in the list is a re-ranking flow). Changing trips appends the row to the target
+// itinerary; leaving a trip clears the itinerary position.
+export async function updateExperience(args: {
+  id: string;
+  draft: ExperienceDraft;
+  onPhotoError?: () => void;
+}): Promise<void> {
+  const { id, draft, onPhotoError } = args;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  const photos = await resolvePhotos(user.id, draft.photos, onPhotoError);
+
+  const { data: row } = await supabase
+    .from('experiences')
+    .select('trip_id, trip_position')
+    .eq('id', id)
+    .maybeSingle();
+  let tripPosition = row?.trip_position ?? null;
+  if ((row?.trip_id ?? null) !== draft.trip_id) {
+    tripPosition = draft.trip_id ? await appendTripPosition(draft.trip_id) : null;
+  }
+
+  const { error } = await supabase
+    .from('experiences')
+    .update({
+      title: draft.title,
+      locations: draft.locations,
+      location: draft.locations[0] ?? null,
+      tags: draft.tags,
+      photos,
+      quick_take: draft.quick_take,
+      experience_date: draft.experience_date,
+      trip_id: draft.trip_id,
+      trip_position: tripPosition,
+    })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Owner delete. RLS restricts to own rows; saves cascade via FK, and rank positions
+// are derived from rank_key order, so nothing else needs re-keying.
+export async function deleteExperience(id: string): Promise<void> {
+  const { error } = await supabase.from('experiences').delete().eq('id', id);
   if (error) throw error;
 }
 
@@ -82,25 +180,8 @@ export async function insertRankedExperience(args: {
 }): Promise<void> {
   const { userId, draft, sentiment, rankKey, onPhotoError } = args;
 
-  let photoUrls: string[] = [];
-  try {
-    photoUrls = await uploadExperiencePhotos(userId, draft.photos);
-  } catch {
-    if (draft.photos.length > 0) onPhotoError?.();
-  }
-
-  let tripPosition: string | null = null;
-  if (draft.trip_id) {
-    const { data: rows } = await supabase
-      .from('experiences')
-      .select('trip_position, rank_key')
-      .eq('trip_id', draft.trip_id);
-    const ps = (rows ?? [])
-      .map((r) => r.trip_position ?? r.rank_key)
-      .filter((p): p is string => !!p)
-      .sort();
-    tripPosition = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
-  }
+  const photoUrls = await resolvePhotos(userId, draft.photos, onPhotoError);
+  const tripPosition = draft.trip_id ? await appendTripPosition(draft.trip_id) : null;
 
   const { error } = await supabase.from('experiences').insert({
     user_id: userId,

@@ -170,12 +170,21 @@ Experiences and Profile stacks.
 
 ### Log flow (Log tab → LogNavigator)
 `LogHome` (two options) → either:
-- **Log an experience:** `AddExperience` (title, place(s), photos, quick take, tags,
+- **Log an experience:** `AddExperience` (title, place(s), date, photos, quick take, tags,
   optional trip) → `RankExperience` (sentiment + binary compare) → inserts the experience.
 - **Start a trip:** `StartTrip` creates a trip container (title/destination/dates/cover),
   optionally jump to add an experience.
-Trip owners can also add **planned stops** and log/reorder/delete directly from TripDetail;
-ranking a planned stop routes through the same `RankExperience` screen (graduation).
+`AddExperienceScreen` is a **three-mode form** (`ExperienceForm`): `create` (above),
+`graduate` (Rank on a planned stop opens it prefilled — add photos/take/tags/confirm the
+date, then rank; the save updates the row in place), and `edit` (registered as
+`EditExperience` modal in the Feed/Experiences/Profile stacks — owner content edits via
+`updateExperience`; sentiment/rank_key are never editable here, re-ranking is its own
+future flow). Owners can also **delete** from ExperienceDetail (`deleteExperience`; saves
+cascade, positions self-heal since they derive from rank_key order).
+Finishing any rank flow **resets the Log stack to LogHome** and jumps to where the result
+is visible (the trip's itinerary if the log belongs to a trip, else the Experiences ranked
+list) — plain `popToTop()` breaks when the flow was deep-navigated into (AddExperience can
+be the stack root).
 
 ## Conventions
 

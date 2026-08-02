@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity,
+  View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, Alert,
   ActivityIndicator, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
@@ -12,7 +12,7 @@ import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji, sentimentLabel,
 } from '@/lib/experienceDisplay';
 import { formatDay } from '@/lib/dates';
-import { getExperience } from '@/lib/experiences';
+import { getExperience, deleteExperience } from '@/lib/experiences';
 import { getMyProfile } from '@/lib/me';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
@@ -55,6 +55,33 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
     },
   });
 
+  // Owner delete (#53). Positions are derived from rank_key order and saves cascade
+  // in the DB, so invalidating the owner's lists is all the cleanup needed.
+  const del = useMutation({
+    mutationFn: () => deleteExperience(experienceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+      queryClient.invalidateQueries({ queryKey: qk.myTrips });
+      if (exp?.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(exp.trip_id) });
+      navigation.goBack();
+    },
+    onError: (e: unknown) =>
+      Alert.alert('Could not delete', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  function confirmDelete() {
+    Alert.alert(
+      'Delete this experience?',
+      exp?.trip_id
+        ? 'It will leave your ranked list and its trip. This can’t be undone.'
+        : 'It will leave your ranked list. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => del.mutate() },
+      ],
+    );
+  }
+
   function onPhotoScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
     setPhotoIndex(Math.round(e.nativeEvent.contentOffset.x / width));
   }
@@ -95,7 +122,22 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={8}>
           <AppText variant="body" weight="medium" color={COLORS.accent}>‹ Back</AppText>
         </TouchableOpacity>
-        {!isMine && ranked && (
+        {isMine ? (
+          <View style={styles.ownerActions}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EditExperience', { experienceId })}
+              hitSlop={8}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="create-outline" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={confirmDelete} disabled={del.isPending} hitSlop={8} activeOpacity={0.7}>
+              {del.isPending
+                ? <ActivityIndicator size="small" color={COLORS.error} />
+                : <Ionicons name="trash-outline" size={22} color={COLORS.error} />}
+            </TouchableOpacity>
+          </View>
+        ) : ranked ? (
           <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
             <Ionicons
               name={saved ? 'bookmark' : 'bookmark-outline'}
@@ -103,7 +145,7 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
               color={saved ? COLORS.brand : COLORS.text}
             />
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -259,6 +301,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md,
   },
   scroll: { paddingBottom: SPACING.xxl },
+  ownerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   photo: { height: PHOTO_HEIGHT, backgroundColor: COLORS.border },
   dots: {
     flexDirection: 'row', justifyContent: 'center', gap: 6,

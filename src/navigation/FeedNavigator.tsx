@@ -7,6 +7,7 @@ import { UserProfileScreen } from '@/screens/profile/UserProfileScreen';
 import { FollowListScreen } from '@/screens/profile/FollowListScreen';
 import { TripDetailScreen } from '@/screens/profile/TripDetailScreen';
 import { ExperienceDetailScreen } from '@/screens/experience/ExperienceDetailScreen';
+import { EditExperienceScreen } from '@/screens/log/AddExperienceScreen';
 
 const Stack = createNativeStackNavigator<FeedStackParamList>();
 
@@ -19,6 +20,7 @@ export function FeedNavigator() {
       <Stack.Screen name="FollowList" component={FollowListScreen} />
       <Stack.Screen name="TripDetail" component={TripDetailScreen} />
       <Stack.Screen name="ExperienceDetail" component={ExperienceDetailScreen} />
+      <Stack.Screen name="EditExperience" component={EditExperienceScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }

@@ -7,6 +7,7 @@ import { UserProfileScreen } from '@/screens/profile/UserProfileScreen';
 import { EditProfileScreen } from '@/screens/profile/EditProfileScreen';
 import { FollowListScreen } from '@/screens/profile/FollowListScreen';
 import { ExperienceDetailScreen } from '@/screens/experience/ExperienceDetailScreen';
+import { EditExperienceScreen } from '@/screens/log/AddExperienceScreen';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -19,6 +20,7 @@ export function ProfileNavigator() {
       <Stack.Screen name="FollowList" component={FollowListScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="ExperienceDetail" component={ExperienceDetailScreen} />
+      <Stack.Screen name="EditExperience" component={EditExperienceScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
