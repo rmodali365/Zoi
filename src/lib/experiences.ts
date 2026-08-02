@@ -120,8 +120,23 @@ export async function graduatePlannedStop(args: {
   if (error) throw error;
 }
 
+// Re-rank an existing ranked experience (#61): ONLY sentiment + rank_key move.
+// Content, photos, trip membership and itinerary position stay untouched — the
+// mirror image of updateExperience below, which touches everything BUT these two.
+export async function rerankExperience(args: {
+  experienceId: string;
+  sentiment: Sentiment;
+  rankKey: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('experiences')
+    .update({ sentiment: args.sentiment, rank_key: args.rankKey })
+    .eq('id', args.experienceId);
+  if (error) throw error;
+}
+
 // Owner edit: update an experience's content (never its sentiment/rank_key — moving
-// in the list is a re-ranking flow). Changing trips appends the row to the target
+// in the list is the re-ranking flow above). Changing trips appends the row to the target
 // itinerary; leaving a trip clears the itinerary position.
 export async function updateExperience(args: {
   id: string;

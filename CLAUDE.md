@@ -56,7 +56,8 @@ src/
     auth.ts                 # getMyUserId, sendOtp, verifyOtp, signOut
     me.ts                   # current user's experiences/trips/profile (shared qk cache)
     users.ts                # profile CRUD, handle validation, avatar update
-    experiences.ts          # getRankedExperiences, insertRankedExperience, graduatePlannedStop
+    experiences.ts          # getRankedExperiences, insertRankedExperience, graduatePlannedStop,
+                            #   rerankExperience (sentiment + rank_key only)
     experienceDisplay.ts    # display helpers: title/locality/sentiment label, multi-location tolerant
     trips.ts                # trip CRUD + itinerary: city grouping, trip_position ordering,
                             #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
@@ -66,8 +67,6 @@ src/
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
     notifications.ts        # in-app activity: follow/save events (written by DB triggers)
     contacts.ts             # contacts -> Zoi users: hash phones on device, match server-side
-    share.ts                # shareProfile() — native share sheet w/ zoi:// deep link
-    saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors
     share.ts                # shareProfile() — share sheet w/ https link (link Edge Function)
     places.ts               # client wrapper for the `places` Edge Function
     storage.ts              # uploadExperiencePhotos() + uploadAvatar() — local URIs -> public URLs
@@ -97,7 +96,7 @@ src/
     index.tsx               # RootNavigator: session+profile -> App, else Auth; deep-link config
     AuthNavigator.tsx       # Welcome -> PhoneAuth -> VerifyOtp -> SetupProfile
     AppNavigator.tsx        # bottom tabs (Ionicons): Feed / Experiences / Log / Profile
-    FeedNavigator.tsx       # FeedHome, FindPeople (modal), UserProfile, FollowList, TripDetail
+    FeedNavigator.tsx       # FeedHome, FindPeople (modal), Search, UserProfile, FollowList, TripDetail
     ExperiencesNavigator.tsx# ExperiencesHome (MyListScreen) + TripDetail
     LogNavigator.tsx        # LogHome, AddExperience, RankExperience, StartTrip
     ProfileNavigator.tsx    # ProfileHome, TripDetail, UserProfile, FollowList, EditProfile (modal)
@@ -115,7 +114,7 @@ src/
     profile/FollowListScreen.tsx  # followers / following list
     profile/EditProfileScreen.tsx # edit name/@handle/avatar (modal)
     profile/TripDetailScreen.tsx  # trip itinerary: city sections, map, owner edit / visitor copy
-    search/SearchScreen.tsx # stub, NOT mounted in tabs (kept for later repurpose)
+    search/SearchScreen.tsx # place search over followed users' rankings + trips (Feed stack)
 supabase/
   migrations/               # SOURCE OF TRUTH for the DB (see DB section)
   schema.sql                # generated snapshot, read-only
@@ -193,13 +192,17 @@ Experiences and Profile stacks.
 `graduate` (Rank on a planned stop opens it prefilled — add photos/take/tags/confirm the
 date, then rank; the save updates the row in place), and `edit` (registered as
 `EditExperience` modal in the Feed/Experiences/Profile stacks — owner content edits via
-`updateExperience`; sentiment/rank_key are never editable here, re-ranking is its own
-future flow). Owners can also **delete** from ExperienceDetail (`deleteExperience`; saves
-cascade, positions self-heal since they derive from rank_key order).
+`updateExperience`; sentiment/rank_key are never editable here). Re-rank machinery exists —
+`RankExperience` with `rerank: true` excludes the row from its own comparison pool and
+updates ONLY sentiment + rank_key via `rerankExperience` — but it deliberately has NO
+user-facing entry point: on-demand re-ranking was cut as a product decision, and the
+planned periodic check-in flow ("does it still hold up?") will be its only driver. Owners
+can also **delete** from ExperienceDetail (`deleteExperience`; saves cascade, positions
+self-heal since they derive from rank_key order).
 Finishing any rank flow **resets the Log stack to LogHome** and jumps to where the result
-is visible (the trip's itinerary if the log belongs to a trip, else the Experiences ranked
-list) — plain `popToTop()` breaks when the flow was deep-navigated into (AddExperience can
-be the stack root).
+is visible (the trip's itinerary if the log belongs to a trip — re-ranks always go to the
+ranked list — else the Experiences ranked list) — plain `popToTop()` breaks when the flow
+was deep-navigated into (AddExperience can be the stack root).
 
 ## Conventions
 

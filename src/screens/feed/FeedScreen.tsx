@@ -70,6 +70,9 @@ export function FeedScreen({ navigation }: Props) {
       <View style={styles.header}>
         <AppText variant="title" style={styles.wordmark}>Zoi</AppText>
         <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => navigation.navigate('Search')} hitSlop={8}>
+            <Ionicons name="search-outline" size={22} color={COLORS.text} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Activity')} hitSlop={8}>
             <Ionicons name="notifications-outline" size={22} color={COLORS.text} />
             {unread > 0 && <View style={styles.unreadDot} />}

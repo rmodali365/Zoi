@@ -85,3 +85,35 @@ export async function getFeed(): Promise<FeedEntry[]> {
   entries.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return entries;
 }
+
+export type PlaceSearchResults = { experiences: FeedItem[]; trips: FeedTrip[] };
+
+// "What do my friends rank in Austin?" (#63) — filter already-fetched feed
+// entries by place/title text. Pure so SearchScreen can reuse the cached qk.feed
+// query instead of refetching per keystroke; same client-side scale caveat as
+// getFeed itself. Experiences come back best-ranked-first (the author's own
+// ordering is the recommendation).
+export function filterFeedByPlace(entries: FeedEntry[], query: string): PlaceSearchResults {
+  const q = query.trim().toLowerCase();
+  if (!q) return { experiences: [], trips: [] };
+
+  const experiences: FeedItem[] = [];
+  const trips: FeedTrip[] = [];
+  for (const entry of entries) {
+    if (entry.kind === 'experience') {
+      const it = entry.item;
+      const locs = it.locations?.length ? it.locations : it.location ? [it.location] : [];
+      const hay = [it.title, ...locs.flatMap((l) => [l.name, l.city, l.region, l.country])]
+        .filter(Boolean)
+        .join(' · ')
+        .toLowerCase();
+      if (hay.includes(q)) experiences.push(it);
+    } else {
+      const t = entry.trip;
+      const hay = [t.title, t.destination, ...t.cities].filter(Boolean).join(' · ').toLowerCase();
+      if (hay.includes(q)) trips.push(t);
+    }
+  }
+  experiences.sort((a, b) => a.rankPosition - b.rankPosition);
+  return { experiences, trips };
+}

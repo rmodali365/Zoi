@@ -224,15 +224,4 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs,
     paddingVertical: SPACING.sm, marginBottom: SPACING.xs,
   },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
-  },
-  info: { flex: 1 },
-  followBtn: {
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 4,
-    borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
-  },
-  followingBtn: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
 });
