@@ -12,4 +12,7 @@ web-build/
 web-build/
 .env
 .env.local
+.env.development
+.env.production
+.env.*.local
 .claude/settings.local.json
