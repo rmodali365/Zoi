@@ -12,10 +12,11 @@ import { AppNavigator } from './AppNavigator';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Deep links: zoi://user/<id> (exp://… in dev) opens that user's profile inside the
-// Feed tab. Only resolves when authenticated (the App stack is mounted).
+// Deep links: zoi://user/<id> (exp://… in dev) and the Universal Link
+// https://zoisocial.com/user/<id> both open that user's profile inside the Feed tab.
+// Only resolves when authenticated (the App stack is mounted).
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: [Linking.createURL('/'), 'zoi://'],
+  prefixes: [Linking.createURL('/'), 'zoi://', 'https://zoisocial.com'],
   config: {
     screens: {
       App: {
