@@ -71,16 +71,18 @@ export function MyListScreen({ navigation }: Props) {
   const [rankedView, setRankedView] = useState<RankedView>('list');
   // Wishlist item being copied into one of your trips as a planned stop (#57).
   const [tripPickerItem, setTripPickerItem] = useState<Experience | null>(null);
+  // Pull-to-refresh spinner: driven ONLY by an explicit pull (see note in onRefresh).
+  const [refreshing, setRefreshing] = useState(false);
 
-  const { data: items = [], isLoading: loadingItems, refetch: refetchItems, isRefetching: refItems } = useQuery({
+  const { data: items = [], isLoading: loadingItems, refetch: refetchItems } = useQuery({
     queryKey: qk.myExperiences,
     queryFn: getMyExperiences,
   });
-  const { data: saved = [], isLoading: loadingSaves, refetch: refetchSaves, isRefetching: refSaves } = useQuery({
+  const { data: saved = [], isLoading: loadingSaves, refetch: refetchSaves } = useQuery({
     queryKey: qk.saves,
     queryFn: getSaves,
   });
-  const { data: trips = [], refetch: refetchTrips, isRefetching: refTrips } = useQuery({
+  const { data: trips = [], refetch: refetchTrips } = useQuery({
     queryKey: qk.myTrips,
     queryFn: getMyTrips,
   });
@@ -124,10 +126,16 @@ export function MyListScreen({ navigation }: Props) {
     },
   });
 
-  const onRefresh = useCallback(() => {
-    refetchItems();
-    refetchSaves();
-    refetchTrips();
+  // Bind the spinner to an explicit pull only. Binding RefreshControl.refreshing to
+  // React Query's isRefetching also catches background refetches (on focus / after
+  // mutations), which leaves the spinner stuck at the top when navigating in.
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetchItems(), refetchSaves(), refetchTrips()]);
+    } finally {
+      setRefreshing(false);
+    }
   }, [refetchItems, refetchSaves, refetchTrips]);
 
   if (loadingItems && loadingSaves) {
@@ -138,7 +146,6 @@ export function MyListScreen({ navigation }: Props) {
     );
   }
 
-  const refreshing = refItems || refSaves || refTrips;
   const showMap = tab === 'ranked' && rankedView === 'map';
 
   const subtitle =

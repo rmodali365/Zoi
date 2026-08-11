@@ -3,6 +3,7 @@ import { Trip, Experience, Location } from '@/types';
 import { primaryLocation, localityLabel, experienceTitle } from '@/lib/experienceDisplay';
 import { keyAfter, keyBefore, keyBetween, initialRankKey } from '@/lib/ranking';
 import { daysBetween, formatDay } from '@/lib/dates';
+import { haptics } from '@/lib/haptics';
 
 export type TripDetail = { trip: Trip | null; items: Experience[] };
 
@@ -189,6 +190,7 @@ export async function setTripPosition(itemId: string, position: string): Promise
 // (place + note only — the original's ranking/quick take are left behind). Lands
 // at the end of the target trip's itinerary.
 export async function copyStopToTrip(item: Experience, tripId: string): Promise<void> {
+  haptics.lightTap();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
   const { data: rows } = await supabase

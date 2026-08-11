@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { ProfileStackParamList } from '@/types';
 import { cleanHandle, updateProfile, updateAvatar } from '@/lib/users';
+import { haptics } from '@/lib/haptics';
 import { getMyProfile } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
@@ -71,6 +72,7 @@ export function EditProfileScreen({ navigation }: Props) {
       return;
     }
     if (result.error === 'handle_taken') {
+      haptics.error();
       Alert.alert('Handle taken', `@${handleClean} is already in use. Pick another.`);
     } else {
       Alert.alert('Error', 'Could not save your profile. Try again.');

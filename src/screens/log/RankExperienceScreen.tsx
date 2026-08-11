@@ -14,6 +14,8 @@ import {
 } from '@/lib/experiences';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
+import { haptics } from '@/lib/haptics';
+import { useBanner } from '@/contexts/BannerContext';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -24,6 +26,7 @@ type Props = {
 
 export function RankExperienceScreen({ navigation, route }: Props) {
   const { draft, experienceId, rerank } = route.params;
+  const { show } = useBanner();
 
   const [phase, setPhase] = useState<'sentiment' | 'comparing' | 'saving'>('sentiment');
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
@@ -33,6 +36,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
   const [hi, setHi] = useState(0);
 
   async function handlePickSentiment(s: Sentiment) {
+    haptics.select();
     setSentiment(s);
     setPhase('saving');
 
@@ -71,6 +75,7 @@ export function RankExperienceScreen({ navigation, route }: Props) {
 
   // User chose which experience they enjoyed more.
   function handleChoice(newIsBetter: boolean) {
+    haptics.compareTap();
     const mid = (lo + hi) >> 1;
     let nextLo = lo;
     let nextHi = hi;
@@ -132,8 +137,9 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         await rerankExperience({ experienceId, sentiment: s, rankKey });
         invalidate();
         queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
-        Alert.alert('Re-ranked!', `${draft.title} now sits at #${pos + 1} of ${total}.`,
-          [{ text: 'Done', onPress: finish }]);
+        haptics.success();
+        show({ title: 'Re-ranked!', message: `${draft.title} now sits at #${pos + 1} of ${total}.` });
+        finish();
         return;
       }
 
@@ -150,8 +156,9 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         });
         invalidate();
         queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
-        Alert.alert('Ranked!', `${draft.title} landed at #${pos + 1} of ${total}.`,
-          [{ text: 'Done', onPress: finish }]);
+        haptics.success();
+        show({ title: 'Ranked!', message: `${draft.title} landed at #${pos + 1} of ${total}.` });
+        finish();
         return;
       }
 
@@ -171,14 +178,15 @@ export function RankExperienceScreen({ navigation, route }: Props) {
 
     invalidate();
 
+    haptics.success();
     const isFirst = total === 1;
-    Alert.alert(
-      isFirst ? '🎉 First one!' : 'Ranked!',
-      isFirst
+    show({
+      title: isFirst ? '🎉 First one!' : 'Ranked!',
+      message: isFirst
         ? `${draft.title} is your #1. You started your list!`
         : `${draft.title} landed at #${pos + 1} of ${total}`,
-      [{ text: 'Done', onPress: finish }],
-    );
+    });
+    finish();
   }
 
   if (phase === 'saving') {

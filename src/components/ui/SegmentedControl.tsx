@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { AppText } from '@/components/ui/AppText';
+import { haptics } from '@/lib/haptics';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Segment<T extends string> = { value: T; label: string };
@@ -21,7 +22,7 @@ export function SegmentedControl<T extends string>({ segments, value, onChange }
           <TouchableOpacity
             key={s.value}
             style={[styles.segment, active && styles.segmentActive]}
-            onPress={() => onChange(s.value)}
+            onPress={() => { if (s.value !== value) haptics.select(); onChange(s.value); }}
             activeOpacity={0.8}
           >
             <AppText variant="subhead" weight="semibold" color={active ? COLORS.surface : COLORS.textSecondary}>

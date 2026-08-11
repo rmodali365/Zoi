@@ -6,6 +6,7 @@ import { Experience } from '@/types';
 import { copyStopToTrip } from '@/lib/trips';
 import { getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
+import { useBanner } from '@/contexts/BannerContext';
 import { AppText } from '@/components/ui/AppText';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -21,6 +22,7 @@ type Props = {
 // the inspiration mechanic works wherever an experience is seen (#57/#58).
 export function TripPickerSheet({ item, onClose }: Props) {
   const queryClient = useQueryClient();
+  const { show } = useBanner();
   const { data: myTrips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
 
   const copyStop = useMutation({
@@ -29,7 +31,7 @@ export function TripPickerSheet({ item, onClose }: Props) {
     onSuccess: (_d, vars) => {
       queryClient.invalidateQueries({ queryKey: qk.trip(vars.toTripId) });
       onClose();
-      Alert.alert('Added to your trip', 'Saved as a planned stop you can rank later.');
+      show({ title: 'Added to your trip', message: 'Saved as a planned stop you can rank later.', icon: 'airplane' });
     },
     onError: (e: unknown) => Alert.alert('Could not add', e instanceof Error ? e.message : 'Try again.'),
   });
