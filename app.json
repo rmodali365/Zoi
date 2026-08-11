@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.zoi.mobile",
+      "associatedDomains": ["applinks:zoisocial.com"],
       "infoPlist": {
         "NSContactsUsageDescription": "Zoi uses your contacts to find friends already on the app.",
         "NSLocationWhenInUseUsageDescription": "Zoi uses your location to suggest the right experience bucket.",

@@ -1,0 +1,10 @@
+name = "zoisocial"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Run the Worker on the whole apex domain. Requires the zoisocial.com zone on Cloudflare
+# (it is — registered there) plus a proxied placeholder DNS record for the apex so the
+# route has something to attach to. See README.md.
+routes = [
+  { pattern = "zoisocial.com/*", zone_name = "zoisocial.com" },
+]

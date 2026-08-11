@@ -1,20 +1,18 @@
 import { Share } from 'react-native';
 import * as Linking from 'expo-linking';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-
 // In-app deep link for a user profile, e.g. zoi://user/<id> (exp://… in dev).
 // Matches the `user/:userId` route in the NavigationContainer linking config.
 export function userProfileUrl(userId: string): string {
   return Linking.createURL(`user/${userId}`);
 }
 
-// Shareable https link for a profile — lands on the public `link` Edge Function,
-// which opens the app (via the zoi:// deep link) when installed and shows a
-// get-the-app fallback otherwise. Custom-scheme URLs are dead ends for anyone
-// without the app, so never share zoi:// directly (#56).
+// Shareable https link for a profile — served by the zoisocial.com Cloudflare Worker.
+// As a Universal Link it opens the app directly when installed; otherwise the page shows
+// a get-the-app fallback. Custom-scheme URLs are dead ends for anyone without the app, so
+// never share zoi:// directly (#56, #75).
 export function webProfileUrl(userId: string): string {
-  return `${SUPABASE_URL}/functions/v1/link/user/${userId}`;
+  return `https://zoisocial.com/user/${userId}`;
 }
 
 // Open the native share sheet with a message + a link to this profile.

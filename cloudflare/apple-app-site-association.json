@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["39AY5ML2YA.app.zoi.mobile"],
+        "components": [
+          { "/": "/user/*", "comment": "User profile share links" }
+        ]
+      }
+    ]
+  }
+}
