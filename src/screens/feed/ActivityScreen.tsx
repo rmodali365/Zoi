@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -24,10 +24,22 @@ type Props = {
 export function ActivityScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
 
-  const { data: items = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: qk.notifications,
     queryFn: getNotifications,
   });
+
+  // Spinner shows only during an explicit pull — not on the background refetch that
+  // fires when navigating in, which otherwise leaves it stuck at the top.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   // Clear the badge once the list is up — rows already fetched keep their
   // unread flag, so the highlight still shows on this visit.
@@ -70,7 +82,7 @@ export function ActivityScreen({ navigation }: Props) {
           data={items}
           keyExtractor={(n) => n.id}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={COLORS.textMuted} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>Nothing yet</AppText>

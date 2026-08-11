@@ -41,15 +41,15 @@ export function ProfileScreen({ navigation }: Props) {
     }, []),
   );
 
-  const { data: profile = null, isLoading: l1, refetch: rp, isRefetching: r1 } = useQuery({
+  const { data: profile = null, isLoading: l1, refetch: rp } = useQuery({
     queryKey: qk.myProfile,
     queryFn: getMyProfile,
   });
-  const { data: experiences = [], isLoading: l2, refetch: re, isRefetching: r2 } = useQuery({
+  const { data: experiences = [], isLoading: l2, refetch: re } = useQuery({
     queryKey: qk.myExperiences,
     queryFn: getMyExperiences,
   });
-  const { data: trips = [], isLoading: l3, refetch: rt, isRefetching: r3 } = useQuery({
+  const { data: trips = [], isLoading: l3, refetch: rt } = useQuery({
     queryKey: qk.myTrips,
     queryFn: getMyTrips,
   });
@@ -62,8 +62,18 @@ export function ProfileScreen({ navigation }: Props) {
   });
 
   const loading = l1 && l2 && l3;
-  const refreshing = r1 || r2 || r3;
-  const onRefresh = useCallback(() => { rp(); re(); rt(); rc(); }, [rp, re, rt, rc]);
+  // Pull-to-refresh spinner: driven ONLY by an explicit pull. Binding it to React
+  // Query's isRefetching also fires on background refetches (on focus / after a
+  // mutation), which leaves the RefreshControl spinner stuck at the top on navigation.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([rp(), re(), rt(), rc()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [rp, re, rt, rc]);
 
   async function handlePickAvatar() {
     const result = await ImagePicker.launchImageLibraryAsync({

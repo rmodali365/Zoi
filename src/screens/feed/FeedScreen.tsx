@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -23,7 +23,7 @@ type Props = {
 export function FeedScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
 
-  const { data: items = [], isLoading, refetch, isRefetching } = useQuery({
+  const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: qk.feed,
     queryFn: getFeed,
   });
@@ -59,10 +59,18 @@ export function FeedScreen({ navigation }: Props) {
     },
   });
 
-  const onRefresh = useCallback(() => {
-    refetch();
-    queryClient.invalidateQueries({ queryKey: qk.savedIds });
-    queryClient.invalidateQueries({ queryKey: qk.notificationsUnread });
+  // Spinner shows only during an explicit pull — not on background refetches (on
+  // focus / after mutations), which otherwise leave it stuck at the top on navigation.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: qk.savedIds });
+      queryClient.invalidateQueries({ queryKey: qk.notificationsUnread });
+    } finally {
+      setRefreshing(false);
+    }
   }, [refetch, queryClient]);
 
   return (
@@ -110,7 +118,7 @@ export function FeedScreen({ navigation }: Props) {
           }
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.textMuted} />}
           ListEmptyComponent={
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>Follow friends to see their rankings</AppText>
