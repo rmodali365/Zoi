@@ -7,16 +7,17 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.zoi.app",
+      "bundleIdentifier": "app.zoi.mobile",
       "infoPlist": {
         "NSContactsUsageDescription": "Zoi uses your contacts to find friends already on the app.",
         "NSLocationWhenInUseUsageDescription": "Zoi uses your location to suggest the right experience bucket.",
         "NSPhotoLibraryUsageDescription": "Zoi lets you add photos to your experiences.",
-        "NSCameraUsageDescription": "Zoi lets you take photos for your experiences."
+        "NSCameraUsageDescription": "Zoi lets you take photos for your experiences.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.zoi.app",
+      "package": "app.zoi.mobile",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_CONTACTS",
