@@ -9,6 +9,7 @@ import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
 import { getMyUserId } from '@/lib/auth';
 import { cleanHandle, createProfile, handleTaken } from '@/lib/users';
+import { haptics } from '@/lib/haptics';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
@@ -37,6 +38,7 @@ export function SetupProfileScreen({ route }: Props) {
       }
 
       if (await handleTaken(handleClean)) {
+        haptics.error();
         Alert.alert('Handle taken', 'That handle is already in use. Pick another.');
         return;
       }

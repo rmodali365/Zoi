@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { haptics } from '@/lib/haptics';
 import { User } from '@/types';
 
 export type UserResult = Pick<User, 'id' | 'name' | 'handle' | 'avatar_url'>;
@@ -116,6 +117,7 @@ export async function getFollowing(userId: string): Promise<UserResult[]> {
 }
 
 export async function followUser(targetId: string): Promise<void> {
+  haptics.lightTap();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   const { error } = await supabase
@@ -125,6 +127,7 @@ export async function followUser(targetId: string): Promise<void> {
 }
 
 export async function unfollowUser(targetId: string): Promise<void> {
+  haptics.lightTap();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   const { error } = await supabase

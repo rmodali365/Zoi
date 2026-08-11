@@ -8,6 +8,7 @@ import { RouteProp } from '@react-navigation/native';
 import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
 import { verifyOtp } from '@/lib/auth';
+import { haptics } from '@/lib/haptics';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -26,6 +27,7 @@ export function VerifyOtpScreen({ navigation, route }: Props) {
     try {
       ({ hasProfile } = await verifyOtp(phone, otp));
     } catch {
+      haptics.error();
       Alert.alert('Invalid code', 'Please check the code and try again.');
       return;
     } finally {
