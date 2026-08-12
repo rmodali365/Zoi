@@ -1,21 +1,16 @@
 import { supabase } from '@/lib/supabase';
-import { User, Experience, Trip } from '@/types';
+import { User, RankedExperience, Trip } from '@/types';
 import { getJoinedTripIds } from '@/lib/tripMembers';
+import { getMyRankedList } from '@/lib/rankings';
 
 // Current-user data fetchers, shared by My List + Profile so they hit the same
 // React Query cache entries (qk.myExperiences / qk.myTrips / qk.myProfile).
 
-export async function getMyExperiences(): Promise<Experience[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  const { data } = await supabase
-    .from('experiences')
-    .select('*')
-    .eq('user_id', user.id)
-    // Ranked surfaces never show planned trip stops.
-    .eq('status', 'ranked')
-    .order('rank_key', { ascending: true });
-  return (data ?? []) as Experience[];
+// Your ranked list = your rankings, best first, each with the shared post it
+// belongs to. Planned trip stops have no ranking, so they can't appear here —
+// the old `status = 'ranked'` filter is now structural.
+export async function getMyExperiences(): Promise<RankedExperience[]> {
+  return getMyRankedList();
 }
 
 // Trips you own PLUS trips you've joined (#67) — a shared trip is as much yours

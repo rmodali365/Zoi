@@ -9,15 +9,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Experience, Location, Trip } from '@/types';
+import { Experience, Location, Trip, RankedExperience } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji,
 } from '@/lib/experienceDisplay';
 import {
-  getTripDetail, groupByCity, groupByDay, groupStops, addPlannedStop, removeStopGroup,
-  removalSummary, setGroupPosition, nextTripPosition, positionToMoveUp, positionToMoveDown,
-  forkTrip, updateTrip, parseDateInput, canEditTrip, claimStopForRanking, StopGroup,
+  getTripDetail, groupByCity, groupByDay, addPlannedStop, removeTripStop,
+  removalSummary, setTripPosition, nextTripPosition, positionToMoveUp, positionToMoveDown,
+  forkTrip, updateTrip, parseDateInput, canEditTrip,
 } from '@/lib/trips';
 import { leaveTrip } from '@/lib/tripMembers';
 import { todayString } from '@/lib/dates';
@@ -124,9 +124,9 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const members = useMemo(() => data?.members ?? [], [data]);
   const myUserId = data?.myUserId ?? null;
 
-  // On a shared trip several rows can describe the same stop (one per person, so
-  // everyone ranks into their own list) — the itinerary shows one line per group.
-  const groups = useMemo(() => groupStops(items, myUserId), [items, myUserId]);
+  // A stop is ONE shared post now, carrying every participant's ranking — so the
+  // itinerary is a plain ordered list again, no grouping layer.
+  const stops = items;
 
   // Day grouping is only offered when the trip has a start date to anchor Day 1.
   const canGroupByDay = !!trip?.start_date;
@@ -134,11 +134,11 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const sections = useMemo(
     () =>
       byDay
-        ? groupByDay(groups, trip?.start_date ?? null).map((s) => ({ key: s.key, label: s.label, items: s.items }))
-        : groupByCity(groups).map((s) => ({ key: s.city, label: s.city, items: s.items })),
-    [groups, byDay, trip?.start_date],
+        ? groupByDay(stops, trip?.start_date ?? null).map((s) => ({ key: s.key, label: s.label, items: s.items }))
+        : groupByCity(stops).map((s) => ({ key: s.city, label: s.city, items: s.items })),
+    [stops, byDay, trip?.start_date],
   );
-  const pins = useMemo(() => groups.map((g) => g.lead).filter(hasCoords), [groups]);
+  const pins = useMemo(() => stops.filter(hasCoords), [stops]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
   const isOwner = !!myUserId && !!trip && trip.user_id === myUserId;
@@ -150,7 +150,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
     trip?.user?.avatar_url,
     ...joinedMembers.map((m) => m.user?.avatar_url),
   ];
-  const plannedGroups = groups.filter((g) => g.rankedCount === 0).length;
+  const plannedStops = stops.filter((s) => s.rankings.length === 0).length;
   const dates = trip ? formatDates(trip.start_date, trip.end_date) : '';
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: qk.trip(tripId) });
@@ -193,16 +193,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
   }
 
   const remove = useMutation({
-    mutationFn: (group: StopGroup) => removeStopGroup(group, myUserId),
-    onSuccess: invalidate,
+    mutationFn: (stop: RankedExperience) => removeTripStop(stop),
+    onSuccess: () => { invalidate(); queryClient.invalidateQueries({ queryKey: qk.myExperiences }); },
     onError: (e: unknown) => Alert.alert('Could not remove', e instanceof Error ? e.message : 'Try again.'),
   });
 
-  // Reordering moves every participant's row for the stop, so a shared stop
-  // can't tear apart in the itinerary.
   const move = useMutation({
-    mutationFn: ({ group, position }: { group: StopGroup; position: string }) =>
-      setGroupPosition(group, position),
+    mutationFn: ({ id, position }: { id: string; position: string }) => setTripPosition(id, position),
     onSuccess: invalidate,
     onError: (e: unknown) => Alert.alert('Could not reorder', e instanceof Error ? e.message : 'Try again.'),
   });
@@ -287,13 +284,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
     onError: (e: unknown) => Alert.alert('Could not save', e instanceof Error ? e.message : 'Try again.'),
   });
 
-  function confirmRemove(group: StopGroup) {
+  function confirmRemove(stop: RankedExperience) {
     Alert.alert(
-      group.rankedCount === 0 ? 'Remove this stop?' : 'Remove from trip?',
-      removalSummary(group, myUserId),
+      stop.rankings.length === 0 ? 'Remove this stop?' : 'Remove from trip?',
+      removalSummary(stop, myUserId),
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(group) },
+        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(stop) },
       ],
     );
   }
@@ -311,25 +308,20 @@ export function TripDetailScreen({ navigation, route }: Props) {
   // graduate mode, prefilled from the row) so photos/quick take/tags can be added
   // before ranking (#51). The save still updates the existing row in place.
   //
-  // On a shared trip you might be ranking a stop a trip mate added. We never flip
-  // their row — `claimStopForRanking` gives you your OWN row in the same group
-  // first, so their sentiment and rank position stay theirs and yours land in
-  // your list. From there it's the exact same graduate flow.
-  const rank = useMutation({
-    mutationFn: (group: StopGroup) => claimStopForRanking(group, myUserId as string),
-    onSuccess: (experienceId: string) => {
-      (navigation as NavigationProp<Record<string, object>>).navigate('Log', {
-        screen: 'AddExperience',
-        params: { graduateExperienceId: experienceId },
-      } as object);
-    },
-    onError: (e: unknown) => Alert.alert('Could not open ranking', e instanceof Error ? e.message : 'Try again.'),
-  });
+  // On a shared trip you might be ranking a stop a trip mate added. Nothing has
+  // to be claimed or copied any more — it's one post, and ranking it just adds
+  // YOUR ranking to it, with your own photos and take.
+  function rankStop(stop: RankedExperience) {
+    (navigation as NavigationProp<Record<string, object>>).navigate('Log', {
+      screen: 'AddExperience',
+      params: { graduateExperienceId: stop.id },
+    } as object);
+  }
 
   function countLine(): string {
-    if (groups.length === 0) return 'No stops yet';
-    const parts = [`${groups.length} ${groups.length === 1 ? 'stop' : 'stops'}`];
-    if (plannedGroups > 0) parts.push(`${plannedGroups} planned`);
+    if (stops.length === 0) return 'No stops yet';
+    const parts = [`${stops.length} ${stops.length === 1 ? 'stop' : 'stops'}`];
+    if (plannedStops > 0) parts.push(`${plannedStops} planned`);
     if (joinedMembers.length > 0) {
       parts.push(`${joinedMembers.length + 1} people`);
     }
@@ -345,12 +337,12 @@ export function TripDetailScreen({ navigation, route }: Props) {
         <View style={styles.topActions}>
           {/* Reordering acts on itinerary order, which day-grouping doesn't show —
               so Edit is only offered in the city view. */}
-          {canEdit && groups.length > 0 && mode === 'list' && !byDay && (
+          {canEdit && stops.length > 0 && mode === 'list' && !byDay && (
             <TouchableOpacity onPress={() => setEditing((e) => !e)} hitSlop={8}>
               <AppText variant="body" weight="semibold" color={COLORS.brand}>{editing ? 'Done' : 'Edit'}</AppText>
             </TouchableOpacity>
           )}
-          {groups.length > 0 && (
+          {stops.length > 0 && (
             <View style={styles.toggle}>
               <TouchableOpacity
                 style={[styles.toggleBtn, mode === 'list' && styles.toggleBtnActive]}
@@ -431,7 +423,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
           </View>
 
           {/* Visitor: copy the whole itinerary into a trip of your own (#33). */}
-          {!canEdit && groups.length > 0 && (
+          {!canEdit && stops.length > 0 && (
             <TouchableOpacity
               style={styles.forkBtn}
               onPress={confirmFork}
@@ -450,7 +442,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
           )}
 
           {/* City vs day grouping (#34) — day needs a start date to anchor Day 1. */}
-          {canGroupByDay && groups.length > 0 && (
+          {canGroupByDay && stops.length > 0 && (
             <View style={styles.groupToggle}>
               <SegmentedControl
                 segments={[
@@ -463,7 +455,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
             </View>
           )}
 
-          {groups.length === 0 ? (
+          {stops.length === 0 ? (
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>This itinerary is empty</AppText>
               <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>
@@ -476,29 +468,30 @@ export function TripDetailScreen({ navigation, route }: Props) {
             sections.map((section) => (
               <View key={section.key} style={styles.section}>
                 <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.cityHeader}>{section.label}</AppText>
-                {section.items.map((group, i) => (
+                {section.items.map((stop, i) => (
                   <ItineraryRow
-                    key={group.key}
-                    group={group}
+                    key={stop.id}
+                    stop={stop}
                     isShared={isShared}
                     editing={editing}
-                    onOpen={() => navigation.navigate('ExperienceDetail', { experienceId: group.lead.id })}
+                    onOpen={() => navigation.navigate('ExperienceDetail', { experienceId: stop.id })}
                     canUp={i > 0}
                     canDown={i < section.items.length - 1}
                     onMoveUp={() => {
                       const p = positionToMoveUp(section.items, i);
-                      if (p) move.mutate({ group, position: p });
+                      if (p) move.mutate({ id: stop.id, position: p });
                     }}
                     onMoveDown={() => {
                       const p = positionToMoveDown(section.items, i);
-                      if (p) move.mutate({ group, position: p });
+                      if (p) move.mutate({ id: stop.id, position: p });
                     }}
-                    onDelete={() => confirmRemove(group)}
+                    onDelete={() => confirmRemove(stop)}
                     canEdit={canEdit}
-                    onRank={() => rank.mutate(group)}
-                    saved={savedIds.has(group.lead.id)}
-                    onToggleSave={() => toggleSave.mutate({ id: group.lead.id, saved: savedIds.has(group.lead.id) })}
-                    onAddToTrip={() => setPickerItem(group.lead)}
+                    onRank={() => rankStop(stop)}
+                    saved={savedIds.has(stop.id)}
+                    onToggleSave={() => toggleSave.mutate({ id: stop.id, saved: savedIds.has(stop.id) })}
+                    onAddToTrip={() => setPickerItem(stop)}
+                    memberCount={joinedMembers.length + 1}
                   />
                 ))}
               </View>
@@ -636,7 +629,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 }
 
 type RowProps = {
-  group: StopGroup;
+  stop: RankedExperience;
   // Shared trips show who's done what; solo trips stay visually unchanged.
   isShared: boolean;
   editing: boolean;
@@ -654,29 +647,27 @@ type RowProps = {
   onOpen: () => void;
 };
 
-// "2 of 4 ranked" — who on the trip has actually done this stop. Only meaningful
-// once more than one person could have.
-function rankedLine(group: StopGroup): string | null {
-  if (group.rankedCount === 0) return null;
-  if (group.rows.length === 1) return null;
-  return `${group.rankedCount} of ${group.rows.length} ranked it`;
+// "2 of 4 on the trip ranked it" — who has actually done this stop. Only
+// meaningful once more than one person could have.
+function rankedLine(stop: RankedExperience, memberCount: number): string | null {
+  if (stop.rankings.length === 0) return null;
+  if (memberCount <= 1) return null;
+  return `${stop.rankings.length} of ${memberCount} ranked it`;
 }
 
-// One itinerary stop. On a shared trip a "stop" is a group: everyone's row for
-// the same outing, displayed as one line showing YOUR take when you have one.
-// Members get edit/reorder/delete + "Rank" (which claims your own row first);
-// non-members get "save to Want-to-do" (ranked) + "add to my trip".
+// One itinerary stop — ONE shared post, showing YOUR ranking when you have one.
+// Members get edit/reorder/delete + "Rank" (which just adds your own ranking to
+// the same post); non-members get "save to Want-to-do" + "add to my trip".
 function ItineraryRow({
-  group, isShared, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
-  canEdit, onRank, saved, onToggleSave, onAddToTrip, onOpen,
-}: RowProps) {
-  const item = group.lead;
+  stop, isShared, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
+  canEdit, onRank, saved, onToggleSave, onAddToTrip, onOpen, memberCount,
+}: RowProps & { memberCount: number }) {
   // "Planned" for YOU: you haven't ranked this, whatever your trip mates did.
-  const planned = !group.mine || group.mine.status === 'planned';
-  const place = localityLabel(item);
-  const ranked = rankedLine(group);
-  // Who logged the row being displayed — only worth showing when it isn't yours.
-  const addedBy = !group.mine ? item.user : undefined;
+  const planned = !stop.mine;
+  const place = localityLabel(stop);
+  const ranked = rankedLine(stop, memberCount);
+  // Everyone else who's ranked it — the shared half of the line.
+  const others = stop.rankings.filter((r) => r.user_id !== stop.mine?.user_id);
 
   return (
     <TouchableOpacity style={styles.row} onPress={onOpen} disabled={editing} activeOpacity={0.7}>
@@ -684,25 +675,27 @@ function ItineraryRow({
         {planned ? (
           <Ionicons name="ellipse-outline" size={18} color={COLORS.textMuted} />
         ) : (
-          <AppText style={styles.rowEmoji}>{sentimentEmoji(group.mine?.sentiment) || '📍'}</AppText>
+          <AppText style={styles.rowEmoji}>{sentimentEmoji(stop.mine?.sentiment) || '📍'}</AppText>
         )}
       </View>
       <View style={styles.rowBody}>
-        <AppText variant="body" weight="semibold" numberOfLines={1}>{experienceTitle(item)}</AppText>
+        <AppText variant="body" weight="semibold" numberOfLines={1}>{experienceTitle(stop)}</AppText>
         {!!place && <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1}>{place}</AppText>}
-        {planned && !!item.note && <AppText variant="caption" style={styles.rowNote}>{item.note}</AppText>}
-        {!planned && !!group.mine?.quick_take && <AppText variant="subhead" weight="regular" color={COLORS.text} style={styles.rowQuote}>“{group.mine.quick_take}”</AppText>}
-        {!planned && !!group.mine?.tags.length && (
+        {planned && !!stop.note && <AppText variant="caption" style={styles.rowNote}>{stop.note}</AppText>}
+        {!!stop.mine?.quick_take && <AppText variant="subhead" weight="regular" color={COLORS.text} style={styles.rowQuote}>“{stop.mine.quick_take}”</AppText>}
+        {!planned && stop.tags.length > 0 && (
           <AppText variant="footnote" numberOfLines={1} style={styles.rowTags}>
-            {group.mine.tags.map((t) => TAG_LABELS[t]).join(' · ')}
+            {stop.tags.map((t) => TAG_LABELS[t]).join(' · ')}
           </AppText>
         )}
-        {isShared && (!!addedBy || !!ranked) && (
+        {isShared && (others.length > 0 || !!ranked) && (
           <View style={styles.rowMeta}>
-            {!!addedBy && (
+            {others.length > 0 && (
               <>
-                <Avatar uri={addedBy.avatar_url} size={16} />
-                <AppText variant="footnote" color={COLORS.textMuted}>{addedBy.name}</AppText>
+                <AvatarStack uris={others.map((r) => r.user?.avatar_url)} size={16} max={3} />
+                <AppText variant="footnote" color={COLORS.textMuted} numberOfLines={1}>
+                  {others.map((r) => r.user?.name?.split(' ')[0] ?? 'someone').join(', ')}
+                </AppText>
               </>
             )}
             {!!ranked && <AppText variant="footnote" color={COLORS.textMuted}>{ranked}</AppText>}
@@ -723,7 +716,7 @@ function ItineraryRow({
         </View>
       ) : !canEdit ? (
         <View style={styles.rowControls}>
-          {group.rankedCount > 0 && (
+          {stop.rankings.length > 0 && (
             <TouchableOpacity onPress={onToggleSave} hitSlop={6}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.accent} />
             </TouchableOpacity>
@@ -738,8 +731,8 @@ function ItineraryRow({
         <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
           <AppText variant="caption" weight="semibold" color={COLORS.surface}>Rank</AppText>
         </TouchableOpacity>
-      ) : group.mine && group.mine.photos.length > 0 ? (
-        <Image source={{ uri: group.mine.photos[0] }} style={styles.thumb} />
+      ) : stop.mine && stop.mine.photos.length > 0 ? (
+        <Image source={{ uri: stop.mine.photos[0] }} style={styles.thumb} />
       ) : null}
     </TouchableOpacity>
   );

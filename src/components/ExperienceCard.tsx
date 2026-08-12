@@ -34,30 +34,32 @@ type Props = {
   onToggleSave?: () => void;
 };
 
-// "Alex", "Alex and Sam", "Alex, Sam and 2 others" — everyone else on this outing.
-function companionNames(item: FeedItem): string {
-  const names = item.companions.map((c) => c.user.name);
+// "Alex", "Alex and Sam", "Alex, Sam and 2 others"
+function nameList(names: string[]): string {
   if (names.length === 0) return '';
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names[0]}, ${names[1]} and ${names.length - 2} ${names.length - 2 === 1 ? 'other' : 'others'}`;
 }
 
+// One outing, one card. A shared experience is a single post carrying everyone's
+// rankings, so the card credits all of them and shows each person's own take —
+// same night, different lists.
 export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, onToggleSave }: Props) {
-  const author = item.user;
   const place = localityLabel(item);
-  // A shared outing: several people logged the same thing, each ranking it into
-  // their own list (#67). The card is credited to all of them.
-  const shared = item.companions.length > 0;
-  const withNames = companionNames(item);
-  // Everyone's photos, so the card carries more than one person's view of the night.
-  const groupPhotos = [...item.photos, ...item.companions.flatMap((c) => c.photos)];
+  const ranked = item.ranked;
+  const lead = ranked[0];
+  const rest = ranked.slice(1);
+  const shared = ranked.length > 1;
+
+  // Everyone's photos: each person shot their own view of the same night.
+  const photos = ranked.flatMap((r) => r.photos);
   // The feed list pads SPACING.xl on both sides; paging needs that exact width.
   const cardWidth = useWindowDimensions().width - SPACING.xl * 2;
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} disabled={!onPress} activeOpacity={0.9}>
-      {/* Author */}
+      {/* Who did it */}
       <TouchableOpacity
         style={styles.head}
         onPress={onPressAuthor}
@@ -65,20 +67,16 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
         activeOpacity={0.7}
       >
         {shared ? (
-          <AvatarStack
-            uris={[author?.avatar_url, ...item.companions.map((c) => c.user.avatar_url)]}
-            size={36}
-            max={3}
-          />
+          <AvatarStack uris={ranked.map((r) => r.user?.avatar_url)} size={36} max={3} />
         ) : (
-          <Avatar uri={author?.avatar_url} size={36} />
+          <Avatar uri={lead?.user?.avatar_url} size={36} />
         )}
         <View style={styles.headInfo}>
           <AppText variant="body" weight="semibold" numberOfLines={1}>
-            {shared ? `${author?.name ?? 'Someone'} & ${withNames}` : author?.name ?? 'Someone'}
+            {nameList(ranked.map((r) => r.user?.name ?? 'Someone'))}
           </AppText>
           <AppText variant="caption" numberOfLines={1}>
-            {shared ? 'did this together' : `@${author?.handle ?? '…'}`}
+            {shared ? 'did this together' : `@${lead?.user?.handle ?? '…'}`}
           </AppText>
         </View>
         <AppText variant="caption">{timeAgo(item.created_at)}</AppText>
@@ -93,13 +91,12 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
         )}
       </TouchableOpacity>
 
-      {/* Photos. On a shared outing this is everyone's — each person shot their own
-          view of the same night, which is half the point of logging it together. */}
-      {groupPhotos.length === 1 ? (
-        <Image source={{ uri: groupPhotos[0] }} style={styles.photo} />
-      ) : groupPhotos.length > 1 ? (
+      {/* Photos */}
+      {photos.length === 1 ? (
+        <Image source={{ uri: photos[0] }} style={styles.photo} />
+      ) : photos.length > 1 ? (
         <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-          {groupPhotos.map((uri) => (
+          {photos.map((uri) => (
             <Image key={uri} source={{ uri }} style={[styles.photo, { width: cardWidth }]} />
           ))}
         </ScrollView>
@@ -110,43 +107,28 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
         <AppText variant="headline" weight="bold">{experienceTitle(item)}</AppText>
         {!!place && <AppText variant="subhead" weight="regular">{place}</AppText>}
 
-        <View style={styles.rankRow}>
-          {shared && (
-            <AppText variant="subhead" weight="semibold" color={COLORS.textSecondary}>
-              {author?.name?.split(' ')[0] ?? 'They'}:{' '}
-            </AppText>
-          )}
-          <AppText variant="subhead" color={COLORS.text}>
-            {sentimentEmoji(item.sentiment)} {sentimentLabel(item.sentiment)}
-          </AppText>
-          <AppText variant="subhead" weight="semibold" color={COLORS.brand}> · ranked #{item.rankPosition} of {item.authorTotal}</AppText>
-        </View>
-
-        {/* Same night, different lists. Each person's own ranking stands on its own —
-            that contrast is the interesting part of a shared experience. */}
-        {item.companions.map((c) => (
-          <View key={c.experienceId} style={styles.rankRow}>
-            <AppText variant="subhead" weight="semibold" color={COLORS.textSecondary}>
-              {c.user.name.split(' ')[0]}:{' '}
-            </AppText>
+        {/* Each person's own ranking. The contrast is the interesting part. */}
+        {ranked.map((r) => (
+          <View key={r.user_id} style={styles.rankRow}>
+            {shared && (
+              <AppText variant="subhead" weight="semibold" color={COLORS.textSecondary}>
+                {r.user?.name?.split(' ')[0] ?? 'They'}:{' '}
+              </AppText>
+            )}
             <AppText variant="subhead" color={COLORS.text}>
-              {sentimentEmoji(c.sentiment)} {sentimentLabel(c.sentiment)}
+              {sentimentEmoji(r.sentiment)} {sentimentLabel(r.sentiment)}
             </AppText>
-            {c.rankPosition !== null && (
-              <AppText variant="subhead" weight="semibold" color={COLORS.brand}> · ranked #{c.rankPosition} of {c.authorTotal}</AppText>
+            {r.rankPosition !== null && (
+              <AppText variant="subhead" weight="semibold" color={COLORS.brand}>
+                {' '}· ranked #{r.rankPosition} of {r.authorTotal}
+              </AppText>
             )}
           </View>
         ))}
 
-        {!!item.quick_take && (
-          <AppText variant="body" style={styles.quote}>
-            {shared ? `${author?.name?.split(' ')[0] ?? ''}: ` : ''}“{item.quick_take}”
-          </AppText>
-        )}
-
-        {item.companions.filter((c) => !!c.quick_take).map((c) => (
-          <AppText key={c.experienceId} variant="body" style={styles.quote}>
-            {c.user.name.split(' ')[0]}: “{c.quick_take}”
+        {ranked.filter((r) => !!r.quick_take).map((r) => (
+          <AppText key={r.user_id} variant="body" style={styles.quote}>
+            {shared ? `${r.user?.name?.split(' ')[0] ?? ''}: ` : ''}“{r.quick_take}”
           </AppText>
         ))}
 

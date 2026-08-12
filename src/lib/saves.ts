@@ -1,9 +1,13 @@
 import { supabase } from '@/lib/supabase';
 import { haptics } from '@/lib/haptics';
-import { Experience } from '@/types';
+import { getMyUserId } from '@/lib/auth';
+import { Experience, RankedExperience } from '@/types';
+import { EXPERIENCE_WITH_RANKINGS, withMine } from '@/lib/rankings';
 
-// A saved experience, with its author embedded for display in the want-to-do list.
-export type SavedExperience = Experience & { savedAt: string };
+// A saved experience, with everyone on it embedded for the want-to-do list.
+// Now that an outing is ONE post, a save points at the outing itself rather than
+// at whichever person's copy you happened to be looking at.
+export type SavedExperience = RankedExperience & { savedAt: string };
 
 // IDs of experiences the current user has saved — used to seed bookmark state in feeds.
 export async function getSavedIds(): Promise<Set<string>> {
@@ -54,19 +58,19 @@ export async function getSaveCounts(experienceIds: string[]): Promise<Record<str
   return counts;
 }
 
-// The current user's want-to-do list: saved experiences with their author embedded.
+// The current user's want-to-do list: saved experiences with everyone on them.
 // Saves persist across unfollows: experiences are authenticated-public (public-profiles
 // RLS), so a saved experience stays readable even after unfollowing its author (#7).
-// GOTCHA: experiences↔users is ambiguous (author FK vs the saves m2m), so the embed
-// must name the explicit author FK.
+// GOTCHA: experiences↔users is ambiguous several ways over (created_by FK plus the
+// rankings/participants/saves many-to-manys), so every embed names its FK.
 export async function getSaves(): Promise<SavedExperience[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  const userId = await getMyUserId();
+  if (!userId) return [];
 
   const { data, error } = await supabase
     .from('saves')
-    .select('created_at, experience:experiences!saves_experience_id_fkey(*, user:users!experiences_user_id_fkey(id, name, handle, avatar_url))')
-    .eq('user_id', user.id)
+    .select(`created_at, experience:experiences!saves_experience_id_fkey(${EXPERIENCE_WITH_RANKINGS})`)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
   if (error) throw error;
 
@@ -74,5 +78,5 @@ export async function getSaves(): Promise<SavedExperience[]> {
   const rows = (data ?? []) as unknown as { created_at: string; experience: Experience | null }[];
   return rows
     .filter((row): row is { created_at: string; experience: Experience } => row.experience !== null)
-    .map((row) => ({ ...row.experience, savedAt: row.created_at }));
+    .map((row) => ({ ...withMine(row.experience, userId), savedAt: row.created_at }));
 }

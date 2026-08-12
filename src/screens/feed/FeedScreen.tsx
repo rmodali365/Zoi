@@ -110,7 +110,11 @@ export function FeedScreen({ navigation }: Props) {
               <ExperienceCard
                 item={entry.item}
                 onPress={() => navigation.navigate('ExperienceDetail', { experienceId: entry.item.id })}
-                onPressAuthor={() => navigation.navigate('UserProfile', { userId: entry.item.user_id })}
+                // Tapping the header opens whoever ranked it first; a shared post
+                // has several people, and the card lists them all.
+                onPressAuthor={() => navigation.navigate('UserProfile', {
+                  userId: entry.item.ranked[0]?.user_id ?? entry.item.created_by,
+                })}
                 saved={savedIds.has(entry.item.id)}
                 onToggleSave={() => toggle.mutate({ id: entry.item.id, wasSaved: savedIds.has(entry.item.id) })}
               />

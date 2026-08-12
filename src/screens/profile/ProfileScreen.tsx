@@ -224,7 +224,7 @@ export function ProfileScreen({ navigation }: Props) {
               <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
-                  {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
+                  {sentimentEmoji(item.mine?.sentiment)} {experienceTitle(item)}
                 </AppText>
                 {!!localityLabel(item) && (
                   <AppText variant="caption" numberOfLines={1} style={styles.rowPlace}>{localityLabel(item)}</AppText>

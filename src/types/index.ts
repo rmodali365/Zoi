@@ -72,14 +72,18 @@ export interface TripMember {
   trip?: Trip;
 }
 
+// The SHARED half of an outing: what happened, held once no matter how many
+// people were there. Everything personal (sentiment, rank position, quick take,
+// photos) lives on a Ranking, because those can't be shared — it's #3 in your
+// list and #12 in theirs.
 export interface Experience {
   id: string;
-  user_id: string;
-  // Lifecycle: 'planned' = a trip stop not yet ranked; 'ranked' = logged + ranked.
-  // Planned stops are hidden from all ranked surfaces (filtered by status).
+  // Who first logged it. NOT an owner: everyone on the experience can edit it,
+  // and the post outlives any one person leaving.
+  created_by: string;
+  // Lifecycle: 'planned' = a trip stop nobody has ranked yet; 'ranked' = at least
+  // one participant has ranked it. Maintained by DB triggers on rankings.
   status: ExperienceStatus;
-  // Null for planned stops (they have no sentiment until ranked).
-  sentiment: Sentiment | null;
   // Optional membership in a trip container
   trip_id: string | null;
   // Short display headline ("SoMa bar crawl"); the primary label shown everywhere.
@@ -90,30 +94,60 @@ export interface Experience {
   // older data. May be absent on very old rows.
   location: Location;
   tags: Tag[];
-  photos: string[];
-  quick_take: string;
-  // Fractional rank string — lower sorts first, scoped within (user_id, sentiment).
-  // Null for planned stops (set when the stop is ranked).
-  rank_key: string | null;
-  // Per-trip itinerary order (fractional index), independent of rank_key. Null
-  // when the experience isn't in a trip.
+  // Per-trip itinerary order (fractional index). Null when not in a trip.
   trip_position: string | null;
   // Optional reminder text on a planned stop.
   note: string | null;
-  // Links the rows different people logged for the SAME real-world outing. Each
-  // participant keeps their own row (own sentiment, rank_key, quick take) — a
-  // group is never one shared row, because one ranked list per user is the whole
-  // model. Null = solo.
-  group_id: string | null;
   // When the experience happened (ranked) or is planned for (planned stop).
   // 'YYYY-MM-DD'; defaults to the log date.
   experience_date: string;
   created_at: string;
   updated_at: string;
   // Joined
-  user?: User;
+  creator?: User;
   trip?: Trip;
+  rankings?: Ranking[];
+  participants?: ExperienceParticipant[];
 }
+
+// One person's take on a shared experience. This is what "my ranked list" reads:
+// rankings for me, ordered by rank_key.
+export interface Ranking {
+  experience_id: string;
+  user_id: string;
+  sentiment: Sentiment;
+  // Fractional index over this user's single overall list.
+  rank_key: string;
+  quick_take: string;
+  // Your photos of the shared night. The post pools everyone's for display, but
+  // each photo belongs to whoever added it — your view of the same evening.
+  photos: string[];
+  created_at: string;
+  updated_at: string;
+  // Joined
+  user?: User;
+  experience?: Experience;
+}
+
+export type ParticipantStatus = 'invited' | 'joined' | 'declined';
+
+// Who's on an experience. Ranking it auto-joins you (DB trigger).
+export interface ExperienceParticipant {
+  experience_id: string;
+  user_id: string;
+  status: ParticipantStatus;
+  invited_by: string | null;
+  created_at: string;
+  // Joined
+  user?: User;
+}
+
+// The shape every list surface renders: the shared post, everyone's rankings,
+// and — when the viewer has one — theirs pulled out as `mine`.
+export type RankedExperience = Experience & {
+  rankings: Ranking[];
+  mine: Ranking | null;
+};
 
 export interface Save {
   user_id: string;
@@ -142,7 +176,9 @@ export type AppTabParamList = {
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
-// Draft passed from AddExperience into the ranking step before insert
+// Draft passed from AddExperience into the ranking step before insert. Mixes the
+// shared fields (title/locations/tags/date/trip) with the personal ones
+// (photos/quick_take) — the save splits them across the two tables.
 export type ExperienceDraft = {
   title: string;
   locations: Location[];

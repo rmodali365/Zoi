@@ -15,6 +15,7 @@ import { getMyExperiences, getMyTrips } from '@/lib/me';
 import { getMembersByTrip } from '@/lib/tripMembers';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
+import { pooledPhotos } from '@/lib/rankings';
 import { TripCard } from '@/components/TripCard';
 import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
@@ -245,7 +246,7 @@ export function MyListScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.info}>
                   <AppText variant="body" weight="semibold" numberOfLines={1}>
-                    {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
+                    {sentimentEmoji(item.mine?.sentiment)} {experienceTitle(item)}
                   </AppText>
                   {!!localityLabel(item) && (
                     <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>{localityLabel(item)}</AppText>
@@ -262,8 +263,8 @@ export function MyListScreen({ navigation }: Props) {
                     <AppText variant="footnote" weight="semibold" color={COLORS.brand}>{saveCounts[item.id]}</AppText>
                   </View>
                 )}
-                {item.photos.length > 0 && (
-                  <Image source={{ uri: item.photos[0] }} style={styles.thumb} />
+                {pooledPhotos(item).length > 0 && (
+                  <Image source={{ uri: pooledPhotos(item)[0] }} style={styles.thumb} />
                 )}
               </TouchableOpacity>
             ))}
@@ -313,11 +314,11 @@ export function MyListScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
               activeOpacity={0.7}
             >
-              {item.photos.length > 0 ? (
-                <Image source={{ uri: item.photos[0] }} style={styles.savedThumb} />
+              {pooledPhotos(item).length > 0 ? (
+                <Image source={{ uri: pooledPhotos(item)[0] }} style={styles.savedThumb} />
               ) : (
                 <View style={[styles.savedThumb, styles.savedThumbPlaceholder]}>
-                  <AppText style={styles.savedEmoji}>{sentimentEmoji(item.sentiment)}</AppText>
+                  <AppText style={styles.savedEmoji}>{sentimentEmoji(item.rankings[0]?.sentiment)}</AppText>
                 </View>
               )}
               <View style={styles.info}>
@@ -325,9 +326,12 @@ export function MyListScreen({ navigation }: Props) {
                 {!!localityLabel(item) && (
                   <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>{localityLabel(item)}</AppText>
                 )}
-                {!!item.user && (
+                {/* Credit everyone who ranked it — a saved night can be several
+                    people's, and the save now points at the shared post. */}
+                {item.rankings.length > 0 && (
                   <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1} style={styles.place}>
-                    {sentimentEmoji(item.sentiment)} from @{item.user.handle}
+                    {sentimentEmoji(item.rankings[0].sentiment)} from{' '}
+                    {item.rankings.map((r) => `@${r.user?.handle ?? '…'}`).join(', ')}
                   </AppText>
                 )}
                 {item.tags.length > 0 && (

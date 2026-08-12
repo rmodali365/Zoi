@@ -11,7 +11,7 @@ import { Location, Tag, ExperienceDraft } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { experienceLocations } from '@/lib/experienceDisplay';
 import { UserResult } from '@/lib/follows';
-import { getGroupParticipants } from '@/lib/experienceTags';
+import { getOtherParticipants } from '@/lib/experienceParticipants';
 import { LocationSearch } from '@/components/LocationSearch';
 import { PeoplePickerSheet } from '@/components/PeoplePickerSheet';
 import { AppText } from '@/components/ui/AppText';
@@ -105,21 +105,24 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
     enabled: !!experienceId,
   });
 
-  // When this row is part of a shared outing (a trip stop others are ranking, or
-  // a tag you accepted), name who else is in it — you're adding YOUR view of the
-  // same night, not duplicating theirs.
+  // When the post is shared (a trip stop others are ranking, or one you were
+  // added to), name who else is on it — you're adding YOUR view of the same
+  // night, not duplicating theirs.
   const { data: alreadyIn = [] } = useQuery({
-    queryKey: ['group-participants', existing?.group_id],
-    queryFn: () => getGroupParticipants(existing?.group_id as string),
-    enabled: !!existing?.group_id,
+    queryKey: ['experience-participants', experienceId],
+    queryFn: () => getOtherParticipants(experienceId as string),
+    enabled: !!experienceId,
   });
 
   useEffect(() => {
     if (hydrated || !existing) return;
+    // Shared half comes from the post; personal half from YOUR ranking, which is
+    // empty when you haven't ranked it yet — that's the blank canvas for your own
+    // photos and take.
     setTitle(existing.title ?? '');
     setLocations(experienceLocations(existing));
-    setPhotos(existing.photos);
-    setQuickTake(existing.quick_take);
+    setPhotos(existing.mine?.photos ?? []);
+    setQuickTake(existing.mine?.quick_take ?? '');
     setTags(existing.tags);
     setTripId(existing.trip_id);
     setDate(existing.experience_date);
