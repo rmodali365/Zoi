@@ -83,7 +83,9 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
             </TouchableOpacity>
           </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" style={styles.list}>
+          {/* Roster scrolls and gives up space first — the search block below is
+              pinned to the sheet's bottom edge so it always clears the keyboard. */}
+          <ScrollView keyboardShouldPersistTaps="handled" style={styles.roster}>
             {!!owner && (
               <View style={styles.row}>
                 <Avatar uri={owner.avatar_url} size={36} />
@@ -110,7 +112,9 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
                 )}
               </View>
             ))}
+          </ScrollView>
 
+          <View style={styles.searchBlock}>
             <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.sectionLabel}>
               ADD SOMEONE
             </AppText>
@@ -126,6 +130,7 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
 
             {isFetching && <ActivityIndicator color={COLORS.textSecondary} style={styles.spinner} />}
 
+            <ScrollView keyboardShouldPersistTaps="handled" style={styles.results}>
             {results.map((u: UserResult) => {
               const isIn = alreadyIn.has(u.id);
               return (
@@ -150,7 +155,8 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
                 </View>
               );
             })}
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
       </SheetBackdrop>
     </Modal>
@@ -161,10 +167,17 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,
-    padding: SPACING.xl, paddingBottom: SPACING.xxl, gap: SPACING.md, minHeight: 420,
+    padding: SPACING.xl, paddingBottom: SPACING.xxl, gap: SPACING.md,
+    // Bounded by what's left above the keyboard rather than a fixed height, so the
+    // sheet shrinks to fit instead of overflowing (which pushed the search field
+    // back under the keyboard).
+    minHeight: 420, maxHeight: '85%',
   },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  list: { maxHeight: 460 },
+  // No fixed height: the roster yields space to the pinned search block below it.
+  roster: { flexShrink: 1 },
+  searchBlock: { gap: SPACING.md },
+  results: { maxHeight: 240 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
     paddingVertical: SPACING.sm,
