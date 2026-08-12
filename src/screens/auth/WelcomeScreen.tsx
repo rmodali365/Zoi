@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
-import { COLORS, SPACING, RADIUS, FONT } from '@/constants/theme';
+import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Welcome'>;
@@ -14,7 +14,7 @@ export function WelcomeScreen({ navigation }: Props) {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.hero}>
-          <AppText style={styles.wordmark}>Zoi</AppText>
+          <AppText variant="wordmark" style={styles.wordmark}>Zoi</AppText>
           <AppText variant="title" weight="regular" color={COLORS.textSecondary} style={styles.tagline}>
             Rank what you do.{'\n'}Share your taste.
           </AppText>
@@ -53,10 +53,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   wordmark: {
-    fontSize: 64,
-    ...FONT.bold,
-    color: COLORS.text,
-    letterSpacing: -2,
     marginBottom: SPACING.md,
   },
   tagline: {
