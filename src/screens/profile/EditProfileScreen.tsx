@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Image,
+  View, StyleSheet, SafeAreaView, TextInput, TouchableOpacity,
   ActivityIndicator, Alert, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import { getMyProfile } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
 import { FormScrollView } from '@/components/ui/FormScrollView';
+import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -106,11 +107,7 @@ export function EditProfileScreen({ navigation }: Props) {
         {/* Avatar */}
         <View style={styles.avatarWrap}>
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]} />
-            )}
+            <Avatar uri={avatarUrl} size={96} />
             <View style={styles.cameraBadge}>
               {uploading
                 ? <ActivityIndicator size="small" color={COLORS.background} />
@@ -168,8 +165,6 @@ const styles = StyleSheet.create({
   },
   content: { padding: SPACING.xl, gap: SPACING.lg },
   avatarWrap: { alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
-  avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.border },
-  avatarPlaceholder: { backgroundColor: COLORS.border },
   cameraBadge: {
     position: 'absolute', bottom: 0, right: 0,
     width: 28, height: 28, borderRadius: 14,
