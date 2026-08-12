@@ -323,7 +323,7 @@ create table public.notifications (
   user_id uuid not null references public.users(id) on delete cascade,
   -- who did the thing
   actor_id uuid not null references public.users(id) on delete cascade,
-  type text not null check (type in ('follow', 'save', 'trip_invite', 'trip_join')),
+  type text not null check (type in ('follow', 'save', 'trip_invite', 'trip_join', 'experience_tag')),
   -- the saved experience (null for follows)
   experience_id uuid references public.experiences(id) on delete cascade,
   -- the trip (trip_invite / trip_join only)
@@ -342,6 +342,8 @@ create unique index notifications_trip_invite_once
   on public.notifications (user_id, actor_id, trip_id) where type = 'trip_invite';
 create unique index notifications_trip_join_once
   on public.notifications (user_id, actor_id, trip_id) where type = 'trip_join';
+create unique index notifications_experience_tag_once
+  on public.notifications (user_id, actor_id, experience_id) where type = 'experience_tag';
 create index notifications_recipient
   on public.notifications (user_id, created_at desc);
 
@@ -415,6 +417,68 @@ $$;
 create trigger trip_members_notify
   after insert or update on public.trip_members
   for each row execute function public.notify_on_trip_membership();
+
+
+-- Experience tags: "you were there too" (see migration 20260812120000).
+-- A tag is an INVITATION — accepting creates the tagged person's own experience
+-- row in the same group_id, which they rank themselves with their own photos.
+create table public.experience_tags (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null,
+  source_experience_id uuid not null references public.experiences(id) on delete cascade,
+  tagged_by uuid not null references public.users(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz not null default now(),
+  unique (source_experience_id, user_id)
+);
+
+create index experience_tags_user on public.experience_tags (user_id, status);
+create index experience_tags_group on public.experience_tags (group_id);
+
+alter table public.experience_tags enable row level security;
+
+-- Private to the two people involved: being named in someone's night before you
+-- agreed to it must not be visible to anyone else.
+create policy "Participants read their own tags"
+  on public.experience_tags for select
+  using (auth.uid() = user_id or auth.uid() = tagged_by);
+
+create policy "Owners tag people on their experience"
+  on public.experience_tags for insert
+  with check (
+    tagged_by = auth.uid()
+    and user_id <> auth.uid()
+    and exists (
+      select 1 from experiences e
+      where e.id = source_experience_id and e.user_id = auth.uid()
+    )
+  );
+
+create policy "Tagged people answer their own tag"
+  on public.experience_tags for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Either side removes a tag"
+  on public.experience_tags for delete
+  using (auth.uid() = user_id or auth.uid() = tagged_by);
+
+create or replace function public.notify_on_experience_tag()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.status = 'pending' then
+    insert into notifications (user_id, actor_id, type, experience_id)
+    values (new.user_id, new.tagged_by, 'experience_tag', new.source_experience_id)
+    on conflict do nothing;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger experience_tags_notify
+  after insert on public.experience_tags
+  for each row execute function public.notify_on_experience_tag();
 
 -- Aggregate save counts for authors. saves are owner-private, so this definer
 -- function exposes ONLY counts — never who saved.

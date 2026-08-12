@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase';
 import { Experience, ExperienceDraft, Sentiment } from '@/types';
 import { keyAfter, initialRankKey } from '@/lib/ranking';
 import { uploadExperiencePhotos } from '@/lib/storage';
+import { newGroupId } from '@/lib/ids';
+import { tagCompanions } from '@/lib/experienceTags';
 
 // Mutations + reads behind the rank-and-log flow. Keeps RankExperienceScreen a thin
 // orchestrator (sentiment → binary compare → save) with no inline Supabase calls.
@@ -95,8 +97,9 @@ export async function graduatePlannedStop(args: {
   sentiment: Sentiment;
   rankKey: string;
   onPhotoError?: () => void;
+  onTagError?: () => void;
 }): Promise<void> {
-  const { experienceId, draft, sentiment, rankKey, onPhotoError } = args;
+  const { experienceId, draft, sentiment, rankKey, onPhotoError, onTagError } = args;
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
 
@@ -118,6 +121,17 @@ export async function graduatePlannedStop(args: {
     })
     .eq('id', experienceId);
   if (error) throw error;
+
+  // You can tag people while graduating too — someone who came along on a trip
+  // stop but isn't on the trip. `tagCompanions` reuses the row's existing group
+  // (every trip stop already has one), so they join the same outing.
+  if (draft.companion_ids.length > 0) {
+    try {
+      await tagCompanions(experienceId, draft.companion_ids);
+    } catch {
+      onTagError?.();
+    }
+  }
 }
 
 // Re-rank an existing ranked experience (#61): ONLY sentiment + rank_key move.
@@ -192,17 +206,24 @@ export async function insertRankedExperience(args: {
   sentiment: Sentiment;
   rankKey: string;
   onPhotoError?: () => void;
+  // Tagging the people you were with can fail independently of the save.
+  onTagError?: () => void;
 }): Promise<void> {
-  const { userId, draft, sentiment, rankKey, onPhotoError } = args;
+  const { userId, draft, sentiment, rankKey, onPhotoError, onTagError } = args;
 
   const photoUrls = await resolvePhotos(userId, draft.photos, onPhotoError);
   const tripPosition = draft.trip_id ? await appendTripPosition(draft.trip_id) : null;
 
-  const { error } = await supabase.from('experiences').insert({
+  // A log with companions is a shared outing from the start, so it gets a group
+  // up front — the tagged friends' rows will join it when they accept (#67).
+  const groupId = draft.companion_ids.length > 0 ? newGroupId() : null;
+
+  const { data, error } = await supabase.from('experiences').insert({
     user_id: userId,
     sentiment,
     trip_id: draft.trip_id,
     trip_position: tripPosition,
+    group_id: groupId,
     title: draft.title,
     locations: draft.locations,
     // Representative location (= locations[0]) for the map pin / legacy reads.
@@ -212,6 +233,16 @@ export async function insertRankedExperience(args: {
     quick_take: draft.quick_take,
     rank_key: rankKey,
     experience_date: draft.experience_date,
-  });
-  if (error) throw error;
+  }).select('id').single();
+  if (error || !data) throw error ?? new Error('Could not save that experience.');
+
+  // Tagging is best-effort: the experience is already yours and ranked, so a
+  // failure here shouldn't lose the log. The caller is told so it can warn.
+  if (draft.companion_ids.length > 0) {
+    try {
+      await tagCompanions(data.id, draft.companion_ids);
+    } catch {
+      onTagError?.();
+    }
+  }
 }

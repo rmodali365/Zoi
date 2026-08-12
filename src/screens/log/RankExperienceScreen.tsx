@@ -157,6 +157,8 @@ export function RankExperienceScreen({ navigation, route }: Props) {
           rankKey,
           onPhotoError: () =>
             Alert.alert('Photo upload failed', 'Saving your experience without the new photos.'),
+          onTagError: () =>
+            Alert.alert('Couldn’t tag everyone', 'Your experience saved — try adding the people you were with again later.'),
         });
         invalidate();
         queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
@@ -173,6 +175,8 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         rankKey,
         onPhotoError: () =>
           Alert.alert('Photo upload failed', 'Saving your experience without photos.'),
+        onTagError: () =>
+          Alert.alert('Couldn’t tag everyone', 'Your experience saved — try adding the people you were with again later.'),
       });
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not save.');

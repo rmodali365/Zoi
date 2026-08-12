@@ -9,6 +9,7 @@ export const qk = {
   trip: (id: string) => ['trip', id] as const,
   tripMembers: (id: string) => ['trip-members', id] as const,
   tripInvites: ['trip-invites'] as const,
+  experienceTags: ['experience-tags'] as const,
   experience: (id: string) => ['experience', id] as const,
   notifications: ['notifications'] as const,
   notificationsUnread: ['notifications', 'unread'] as const,

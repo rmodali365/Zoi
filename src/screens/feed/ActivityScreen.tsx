@@ -4,10 +4,14 @@ import {
   ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NavigationProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FeedStackParamList } from '@/types';
 import { getNotifications, markAllRead, Notification } from '@/lib/notifications';
 import { acceptTripInvite, declineTripInvite, getMyTripInvites } from '@/lib/tripMembers';
+import {
+  acceptExperienceTag, declineExperienceTag, getMyPendingTags, ExperienceTag,
+} from '@/lib/experienceTags';
 import { experienceTitle } from '@/lib/experienceDisplay';
 import { timeAgo } from '@/lib/dates';
 import { qk } from '@/lib/queryKeys';
@@ -61,6 +65,42 @@ export function ActivityScreen({ navigation }: Props) {
     onError: (e: unknown) => Alert.alert('Could not decline', e instanceof Error ? e.message : 'Try again.'),
   });
 
+  // Experience tags — "you were there too" (#67). Same shape as trip invites: the
+  // notification row persists, so the buttons key off the still-pending tags.
+  const { data: tags = [] } = useQuery({
+    queryKey: qk.experienceTags,
+    queryFn: getMyPendingTags,
+  });
+  const tagBySource = new Map(tags.map((t) => [t.source_experience_id, t]));
+
+  function afterTagAnswer() {
+    queryClient.invalidateQueries({ queryKey: qk.experienceTags });
+    queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+    queryClient.invalidateQueries({ queryKey: qk.feed });
+  }
+
+  // Accepting creates YOUR row for the outing and drops you into the normal
+  // capture step — add your own photos and take, then rank it into your list.
+  const acceptTag = useMutation({
+    mutationFn: (tag: ExperienceTag) => acceptExperienceTag(tag),
+    onSuccess: (experienceId: string) => {
+      afterTagAnswer();
+      // Hop to the Log tab's capture step — same cross-tab jump TripDetail makes
+      // for "Rank", so the cast to a generic navigator matches that precedent.
+      (navigation as unknown as NavigationProp<Record<string, object>>).navigate('Log', {
+        screen: 'AddExperience',
+        params: { graduateExperienceId: experienceId },
+      } as object);
+    },
+    onError: (e: unknown) => Alert.alert('Could not add', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const declineTag = useMutation({
+    mutationFn: (tagId: string) => declineExperienceTag(tagId),
+    onSuccess: afterTagAnswer,
+    onError: (e: unknown) => Alert.alert('Could not decline', e instanceof Error ? e.message : 'Try again.'),
+  });
+
   // Spinner shows only during an explicit pull — not on the background refetch that
   // fires when navigating in, which otherwise leaves it stuck at the top.
   const [refreshing, setRefreshing] = useState(false);
@@ -105,6 +145,10 @@ export function ActivityScreen({ navigation }: Props) {
     if (n.type === 'trip_join') {
       return `joined ${n.trip ? `“${n.trip.title}”` : 'your trip'}`;
     }
+    if (n.type === 'experience_tag') {
+      const what = n.experience ? `“${experienceTitle(n.experience)}”` : 'something';
+      return `says you were there for ${what}`;
+    }
     const what = n.experience ? `“${experienceTitle(n.experience)}”` : 'one of your experiences';
     return `wants to do ${what}`;
   }
@@ -140,6 +184,10 @@ export function ActivityScreen({ navigation }: Props) {
           renderItem={({ item }) => {
             const pendingInvite =
               item.type === 'trip_invite' && !!item.trip_id && openInvites.has(item.trip_id);
+            const pendingTag =
+              item.type === 'experience_tag' && item.experience_id
+                ? tagBySource.get(item.experience_id)
+                : undefined;
             return (
               <TouchableOpacity
                 style={[styles.row, !item.read && styles.rowUnread]}
@@ -168,6 +216,27 @@ export function ActivityScreen({ navigation }: Props) {
                         hitSlop={8}
                       >
                         <AppText variant="caption" weight="semibold" color={COLORS.textSecondary}>Decline</AppText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {!!pendingTag && (
+                    <View style={styles.inviteActions}>
+                      <TouchableOpacity
+                        style={styles.acceptBtn}
+                        onPress={() => acceptTag.mutate(pendingTag)}
+                        disabled={acceptTag.isPending}
+                        activeOpacity={0.85}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.surface}>
+                          Add my photos & rank
+                        </AppText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => declineTag.mutate(pendingTag.id)}
+                        disabled={declineTag.isPending}
+                        hitSlop={8}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.textSecondary}>No thanks</AppText>
                       </TouchableOpacity>
                     </View>
                   )}

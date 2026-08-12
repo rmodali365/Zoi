@@ -65,6 +65,8 @@ src/
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
     tripMembers.ts          # collaborative trips: roster, invite/accept/decline, leave/remove,
                             #   joined-trip ids (feeds getMyTrips + the feed)
+    experienceTags.ts       # "who were you with?": tag friends, accept (creates YOUR row in
+                            #   the group) / decline, group participants
     ids.ts                  # newGroupId() — client-side uuid for experiences.group_id
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
@@ -179,6 +181,22 @@ Capabilities (RLS, verified by a behavioural test — see the migration):
   a non-owner may change `trip_position` and nothing else.
 - `getMyTrips` unions owned + joined trips; the feed surfaces a shared trip to the
   followers of every member, credited to all of them (`FeedTrip.builders`).
+
+### Collaborative experiences (#67, second half)
+The same group mechanic outside a trip: on any log, **"Who were you with?"** tags
+friends. A tag is an invitation (`experience_tags`), never a write into their list —
+accepting creates *their* row in the same `group_id` with only the place/title/date
+copied, then drops them into the normal capture step so they add **their own photos and
+quick take** before ranking. Declining leaves nothing behind. A pending tag is private
+to the two people involved: being named in someone's night before you agree to it isn't
+public.
+
+**The feed groups by `group_id`** (`getFeed`): one card per outing, not one per person.
+It carries every participant (`FeedItem.companions`, fetched separately so people you
+don't follow still appear), everyone's photos in one strip, and each person's own
+ranking side by side — "Rushil: 😍 Loved · #3 of 41 / Alex: 🙂 Liked · #12 of 30". That
+contrast is the point: same night, different lists. The earliest row leads the card;
+the card resurfaces when a new person ranks it.
 
 **Planned → ranked ("graduation"):** a planned stop becomes a real ranked experience via
 the normal rank flow with `experienceId` set — `graduatePlannedStop` flips the same row in

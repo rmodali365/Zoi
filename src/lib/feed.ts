@@ -4,10 +4,29 @@ import { getTripIdsForMembers } from '@/lib/tripMembers';
 import { Experience, Trip, User } from '@/types';
 import { primaryLocation } from '@/lib/experienceDisplay';
 
+export type UserBrief = Pick<User, 'id' | 'name' | 'handle' | 'avatar_url'>;
+
+// Someone else who ranked the SAME outing (same experiences.group_id) — a trip
+// mate who ranked a shared stop, or a friend tagged on an experience. Their row
+// is their own: their sentiment, their photos, their place in their own list.
+export type FeedCompanion = {
+  user: UserBrief;
+  experienceId: string;
+  sentiment: Experience['sentiment'];
+  photos: string[];
+  quick_take: string;
+  // Only known for people the viewer follows (their full ranked list is what the
+  // feed query fetched). Null for everyone else — we don't show a made-up rank.
+  rankPosition: number | null;
+  authorTotal: number | null;
+};
+
 export type FeedItem = Experience & {
   // 1-based position within the author's own overall ranked list, and their list size.
   rankPosition: number;
   authorTotal: number;
+  // Everyone ELSE who ranked this same outing. Empty for a solo experience.
+  companions: FeedCompanion[];
 };
 
 // A followed user's trip, summarized for an itinerary card in the feed.
@@ -71,15 +90,80 @@ export async function getFeed(): Promise<FeedEntry[]> {
   for (const e of all) totals[e.user_id] = (totals[e.user_id] ?? 0) + 1;
 
   const seen: Record<string, number> = {};
-  const entries: FeedEntry[] = all.map((e) => {
-    const pos = (seen[e.user_id] = (seen[e.user_id] ?? 0) + 1);
-    return {
-      kind: 'experience',
-      id: `experience-${e.id}`,
-      createdAt: e.created_at,
-      item: { ...e, rankPosition: pos, authorTotal: totals[e.user_id] },
-    };
-  });
+  const rankOf: Record<string, number> = {}; // experience id -> author's position
+  for (const e of all) {
+    rankOf[e.id] = (seen[e.user_id] = (seen[e.user_id] ?? 0) + 1);
+  }
+
+  // Everyone who ranked the same outing, including people the viewer doesn't
+  // follow — a shared night shouldn't look solo just because you only follow one
+  // of them. Experiences are readable by any signed-in user (public profiles).
+  const groupIds = [...new Set(all.map((e) => e.group_id).filter((g): g is string => !!g))];
+  const rowsByGroup: Record<string, Experience[]> = {};
+  if (groupIds.length > 0) {
+    const { data: groupRows } = await supabase
+      .from('experiences')
+      .select('id, user_id, group_id, sentiment, photos, quick_take, created_at, user:users!experiences_user_id_fkey(id, name, handle, avatar_url)')
+      .in('group_id', groupIds)
+      .eq('status', 'ranked');
+    for (const r of (groupRows ?? []) as unknown as Experience[]) {
+      if (r.group_id) (rowsByGroup[r.group_id] ??= []).push(r);
+    }
+  }
+
+  // One card per outing. When several followed users ranked the same thing, the
+  // earliest row leads (the person who logged it first) and the rest ride along
+  // as companions — the card is credited to all of them.
+  const entries: FeedEntry[] = [];
+  const leadByGroup: Record<string, Extract<FeedEntry, { kind: 'experience' }>> = {};
+
+  for (const e of all) {
+    const mine = { ...e, rankPosition: rankOf[e.id], authorTotal: totals[e.user_id], companions: [] as FeedCompanion[] };
+
+    // Ungrouped (solo) experiences are one card each, as before.
+    if (!e.group_id) {
+      entries.push({ kind: 'experience', id: `experience-${e.id}`, createdAt: e.created_at, item: mine });
+      continue;
+    }
+
+    const existing = leadByGroup[e.group_id];
+    if (!existing) {
+      const entry: Extract<FeedEntry, { kind: 'experience' }> = {
+        kind: 'experience',
+        // Keyed by group so the card is stable as more people rank it.
+        id: `group-${e.group_id}`,
+        createdAt: e.created_at,
+        item: mine,
+      };
+      leadByGroup[e.group_id] = entry;
+      entries.push(entry);
+      continue;
+    }
+
+    // A second followed user ranked the same outing. The earliest row leads (whoever
+    // logged it first), but the card surfaces at the newest activity — someone just
+    // ranked it, and that's worth seeing. Companions are filled in below.
+    if (e.created_at < existing.item.created_at) existing.item = mine;
+    if (e.created_at > existing.createdAt) existing.createdAt = e.created_at;
+  }
+
+  // Fill in every participant (followed or not) around each lead row.
+  for (const entry of entries) {
+    if (entry.kind !== 'experience') continue;
+    const groupId = entry.item.group_id;
+    if (!groupId) continue;
+    entry.item.companions = (rowsByGroup[groupId] ?? [])
+      .filter((r) => r.id !== entry.item.id && r.user)
+      .map((r) => ({
+        user: r.user as UserBrief,
+        experienceId: r.id,
+        sentiment: r.sentiment,
+        photos: r.photos ?? [],
+        quick_take: r.quick_take ?? '',
+        rankPosition: rankOf[r.id] ?? null,
+        authorTotal: totals[r.user_id] ?? null,
+      }));
+  }
 
   type FeedMember = { status: string; user: FeedTrip['builders'][number] | null };
   // The member embed is a projection, not full TripMember rows, so `members` is

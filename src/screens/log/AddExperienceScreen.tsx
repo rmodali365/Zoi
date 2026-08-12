@@ -4,13 +4,18 @@ import {
   ScrollView, Image, Alert, ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Location, Tag, ExperienceDraft } from '@/types';
 import { TAGS, TAG_LABELS } from '@/constants/experiences';
 import { experienceLocations } from '@/lib/experienceDisplay';
+import { UserResult } from '@/lib/follows';
+import { getGroupParticipants } from '@/lib/experienceTags';
 import { LocationSearch } from '@/components/LocationSearch';
+import { PeoplePickerSheet } from '@/components/PeoplePickerSheet';
 import { AppText } from '@/components/ui/AppText';
+import { AvatarStack } from '@/components/ui/AvatarStack';
 import { Chip } from '@/components/ui/Chip';
 import { DateField } from '@/components/ui/DateField';
 import { FormScrollView } from '@/components/ui/FormScrollView';
@@ -83,6 +88,9 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
   const [quickTake, setQuickTake] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [tripId, setTripId] = useState<string | null>(presetTripId);
+  // Friends who were there (#67) — tagged on save, never written to their list.
+  const [companions, setCompanions] = useState<UserResult[]>([]);
+  const [pickingPeople, setPickingPeople] = useState(false);
   // When it happened — required, pre-filled with today (past dates allowed).
   const [date, setDate] = useState(todayString());
   // Graduate/edit prefill happens once, after the row loads.
@@ -95,6 +103,15 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
     queryKey: qk.experience(experienceId as string),
     queryFn: () => getExperience(experienceId as string),
     enabled: !!experienceId,
+  });
+
+  // When this row is part of a shared outing (a trip stop others are ranking, or
+  // a tag you accepted), name who else is in it — you're adding YOUR view of the
+  // same night, not duplicating theirs.
+  const { data: alreadyIn = [] } = useQuery({
+    queryKey: ['group-participants', existing?.group_id],
+    queryFn: () => getGroupParticipants(existing?.group_id as string),
+    enabled: !!existing?.group_id,
   });
 
   useEffect(() => {
@@ -163,6 +180,7 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
       tags,
       trip_id: tripLocked ? lockedTripId : tripId,
       experience_date: date,
+      companion_ids: companions.map((c) => c.id),
     };
   }
 
@@ -289,6 +307,43 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
           )}
         </View>
 
+        {/* Who you were with (#67). Tagged friends get an invitation — they add
+            their own photos and rank it into their own list. Not offered on edit:
+            re-tagging after the fact belongs on the detail screen. */}
+        {mode !== 'edit' && (
+          <View style={styles.field}>
+            <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Who were you with?</AppText>
+            {alreadyIn.length > 0 && (
+              <View style={styles.companionField}>
+                <AvatarStack uris={alreadyIn.map((u) => u.avatar_url)} size={24} />
+                <AppText variant="body" numberOfLines={1} style={styles.companionNames}>
+                  With {alreadyIn.map((u) => u.name).join(', ')}
+                </AppText>
+              </View>
+            )}
+            <TouchableOpacity style={styles.companionField} onPress={() => setPickingPeople(true)} activeOpacity={0.7}>
+              {companions.length === 0 ? (
+                <AppText variant="body" color={COLORS.textMuted}>
+                  {alreadyIn.length > 0 ? 'Add someone else' : 'Add friends who were there'}
+                </AppText>
+              ) : (
+                <>
+                  <AvatarStack uris={companions.map((c) => c.avatar_url)} size={24} />
+                  <AppText variant="body" numberOfLines={1} style={styles.companionNames}>
+                    {companions.map((c) => c.name).join(', ')}
+                  </AppText>
+                </>
+              )}
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            {companions.length > 0 && (
+              <AppText variant="caption">
+                They’ll be asked to add their own photos and ranking.
+              </AppText>
+            )}
+          </View>
+        )}
+
         {/* Photos */}
         <View style={styles.field}>
           <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Photos ({photos.length}/{MAX_PHOTOS})</AppText>
@@ -369,6 +424,14 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
           </View>
         ) : null}
       </FormScrollView>
+
+      <PeoplePickerSheet
+        visible={pickingPeople}
+        title="Who were you with?"
+        selected={companions}
+        onChange={setCompanions}
+        onClose={() => setPickingPeople(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -387,6 +450,13 @@ const styles = StyleSheet.create({
   },
   content: { padding: SPACING.xl, gap: SPACING.lg, paddingBottom: SPACING.xxl },
   field: { gap: SPACING.sm },
+  companionField: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    borderWidth: 1.5, borderColor: COLORS.border, borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: 12,
+    backgroundColor: COLORS.surface, minHeight: 48,
+  },
+  companionNames: { flex: 1 },
   label: { textTransform: 'uppercase', letterSpacing: 0.5 },
   graduateBanner: {
     backgroundColor: COLORS.brandLight,

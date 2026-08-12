@@ -5,7 +5,8 @@ import { UserResult } from '@/lib/follows';
 // In-app activity (#59). Rows are written server-side by DB triggers on follows
 // and saves inserts — the client only reads and marks them.
 
-export type NotificationType = 'follow' | 'save' | 'trip_invite' | 'trip_join';
+export type NotificationType =
+  | 'follow' | 'save' | 'trip_invite' | 'trip_join' | 'experience_tag';
 
 export type Notification = {
   id: string;

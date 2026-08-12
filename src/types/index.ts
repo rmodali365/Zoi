@@ -152,6 +152,10 @@ export type ExperienceDraft = {
   trip_id: string | null;
   // When it happened ('YYYY-MM-DD'); required, defaults to today in the UI.
   experience_date: string;
+  // Friends you did this with (#67). They're TAGGED, not written to: each gets an
+  // invitation, and accepting creates their own row in the same group for them to
+  // rank themselves. Empty for a solo log.
+  companion_ids: string[];
 };
 
 export type LogStackParamList = {
