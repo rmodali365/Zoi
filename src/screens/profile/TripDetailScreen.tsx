@@ -9,24 +9,25 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NavigationProp, RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Experience, Location, Trip, RankedExperience } from '@/types';
+import { Experience, Location, StopDetails, StopKind, Trip, RankedExperience } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji,
 } from '@/lib/experienceDisplay';
 import {
-  getTripDetail, groupByCity, groupByDay, addPlannedStop, removeTripStop,
-  removalSummary, setTripPosition, nextTripPosition, positionToMoveUp, positionToMoveDown,
-  forkTrip, updateTrip, parseDateInput, canEditTrip,
+  getTripDetail, groupByCity, groupByDay, addStopFromPlace, removeTripStop,
+  removalSummary, setTripPosition, setStopCity, positionToMoveUp, positionToMoveDown,
+  updateTrip, parseDateInput, canEditTrip, CitySection,
 } from '@/lib/trips';
 import { leaveTrip } from '@/lib/tripMembers';
+import { resolveTripCity } from '@/lib/cities';
+import { KIND_SEGMENTS, kindFromPlaceTypes, kindIcon, isRankable, stopSubtitle } from '@/lib/stops';
 import { todayString } from '@/lib/dates';
 import { getSavedIds, saveExperience, unsaveExperience } from '@/lib/saves';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { getMyUserId } from '@/lib/auth';
 import { qk } from '@/lib/queryKeys';
 import { LocationSearch } from '@/components/LocationSearch';
-import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { InviteToTripSheet } from '@/components/InviteToTripSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
@@ -96,12 +97,19 @@ export function TripDetailScreen({ navigation, route }: Props) {
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newLoc, setNewLoc] = useState<Location | null>(null);
+  const [newKind, setNewKind] = useState<StopKind>('experience');
   const [newNote, setNewNote] = useState('');
   const [newDate, setNewDate] = useState(todayString());
-  // The stop a visitor is copying into one of their own trips (drives the picker).
-  const [pickerItem, setPickerItem] = useState<Experience | null>(null);
   // Roster / invite sheet (#67).
   const [showMembers, setShowMembers] = useState(false);
+  // Kind-specific detail fields (only the relevant ones are read on save).
+  const [checkOut, setCheckOut] = useState('');
+  const [resTime, setResTime] = useState('');
+  const [partySize, setPartySize] = useState('');
+  const [carrier, setCarrier] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  // The stop whose section a member is reassigning (drives the move sheet).
+  const [moveItem, setMoveItem] = useState<RankedExperience | null>(null);
   // Edit-trip-details sheet (owner).
   const [editingTrip, setEditingTrip] = useState(false);
   const [eTitle, setETitle] = useState('');
@@ -131,13 +139,29 @@ export function TripDetailScreen({ navigation, route }: Props) {
   // Day grouping is only offered when the trip has a start date to anchor Day 1.
   const canGroupByDay = !!trip?.start_date;
   const byDay = groupMode === 'day' && canGroupByDay;
+  // City sections (independent of the day/city view) — reused for the "add stop"
+  // section preview and the "move to section" picker.
+  const citySections = useMemo<CitySection[]>(() => groupByCity(stops), [stops]);
   const sections = useMemo(
     () =>
       byDay
         ? groupByDay(stops, trip?.start_date ?? null).map((s) => ({ key: s.key, label: s.label, items: s.items }))
-        : groupByCity(stops).map((s) => ({ key: s.city, label: s.city, items: s.items })),
-    [stops, byDay, trip?.start_date],
+        : citySections.map((s) => ({ key: s.key, label: s.city, items: s.items })),
+    [stops, byDay, trip?.start_date, citySections],
   );
+
+  // Which section a new stop will land in, resolved from the picked place — shown
+  // before saving ("Adding to Tokyo") and passed straight to the insert so the
+  // preview and the actual placement can't disagree.
+  const previewKey = useMemo(
+    () => (newLoc ? resolveTripCity(newLoc, citySections, trip) : null),
+    [newLoc, citySections, trip],
+  );
+  const previewLabel = useMemo(() => {
+    if (!newLoc) return null;
+    const existing = citySections.find((s) => s.key === previewKey);
+    return existing?.city || newLoc.city || 'a new section';
+  }, [newLoc, previewKey, citySections]);
   const pins = useMemo(() => stops.filter(hasCoords), [stops]);
   const region = useMemo(() => regionForPins(pins), [pins]);
 
@@ -169,40 +193,25 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
   const addStop = useMutation({
     mutationFn: () =>
-      addPlannedStop({
+      addStopFromPlace({
         tripId,
         location: newLoc as Location,
+        kind: newKind,
+        details: buildDetails(),
         note: newNote.trim() || null,
-        position: nextTripPosition(items),
         date: newDate,
+        cityKey: previewKey,
       }),
     onSuccess: () => { invalidate(); closeAdd(); },
     onError: (e: unknown) => Alert.alert('Could not add stop', e instanceof Error ? e.message : 'Try again.'),
   });
 
-  // Visitor: "Follow this trip" — clone the whole itinerary as planned stops (#33).
-  const fork = useMutation({
-    mutationFn: () => forkTrip(trip as Trip, items),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.myTrips });
-      Alert.alert(
-        'Trip copied',
-        'Every stop is now a planned stop in a trip you own — find it under Experiences → Trips.',
-      );
-    },
-    onError: (e: unknown) => Alert.alert('Could not copy trip', e instanceof Error ? e.message : 'Try again.'),
+  // Owner: reassign a stop to a different city section ("Move to section").
+  const moveSection = useMutation({
+    mutationFn: ({ id, cityKey }: { id: string; cityKey: string | null }) => setStopCity(id, cityKey),
+    onSuccess: () => { invalidate(); setMoveItem(null); },
+    onError: (e: unknown) => Alert.alert('Could not move', e instanceof Error ? e.message : 'Try again.'),
   });
-
-  function confirmFork() {
-    Alert.alert(
-      'Follow this trip?',
-      `Copies all ${items.length} ${items.length === 1 ? 'stop' : 'stops'} into a new trip of yours, ready to plan and rank.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Copy trip', onPress: () => fork.mutate() },
-      ],
-    );
-  }
 
   const remove = useMutation({
     mutationFn: (stop: RankedExperience) => removeTripStop(stop),
@@ -251,8 +260,40 @@ export function TripDetailScreen({ navigation, route }: Props) {
   function closeAdd() {
     setAdding(false);
     setNewLoc(null);
+    setNewKind('experience');
     setNewNote('');
     setNewDate(todayString());
+    setCheckOut('');
+    setResTime('');
+    setPartySize('');
+    setCarrier('');
+    setConfirmation('');
+  }
+
+  // Auto-detect the kind from the picked place's types (always overridable).
+  function onPickLocation(loc: Location | null) {
+    setNewLoc(loc);
+    if (loc) setNewKind(kindFromPlaceTypes(loc.types, loc.primaryType));
+  }
+
+  // Assemble the kind-specific `details` jsonb from the relevant fields.
+  function buildDetails(): StopDetails {
+    const conf = confirmation.trim() || undefined;
+    if (newKind === 'stay') {
+      return { check_in: newDate, check_out: checkOut.trim() || undefined, confirmation: conf };
+    }
+    if (newKind === 'eat') {
+      const size = parseInt(partySize, 10);
+      return {
+        time: resTime.trim() || undefined,
+        party_size: Number.isFinite(size) && size > 0 ? size : undefined,
+        confirmation: conf,
+      };
+    }
+    if (newKind === 'transport') {
+      return { time: resTime.trim() || undefined, carrier: carrier.trim() || undefined, confirmation: conf };
+    }
+    return {};
   }
 
   function openEditTrip() {
@@ -333,6 +374,10 @@ export function TripDetailScreen({ navigation, route }: Props) {
   function countLine(): string {
     if (stops.length === 0) return 'No stops yet';
     const parts = [`${stops.length} ${stops.length === 1 ? 'stop' : 'stops'}`];
+    const stays = stops.filter((s) => s.kind === 'stay').length;
+    const eats = stops.filter((s) => s.kind === 'eat').length;
+    if (stays > 0) parts.push(`${stays} ${stays === 1 ? 'stay' : 'stays'}`);
+    if (eats > 0) parts.push(eats === 1 ? '1 spot to eat' : `${eats} spots to eat`);
     if (plannedStops > 0) parts.push(`${plannedStops} planned`);
     if (joinedMembers.length > 0) {
       parts.push(`${joinedMembers.length + 1} people`);
@@ -434,24 +479,6 @@ export function TripDetailScreen({ navigation, route }: Props) {
             )}
           </View>
 
-          {/* Visitor: copy the whole itinerary into a trip of your own (#33). */}
-          {!canEdit && stops.length > 0 && (
-            <TouchableOpacity
-              style={styles.forkBtn}
-              onPress={confirmFork}
-              disabled={fork.isPending}
-              activeOpacity={0.85}
-            >
-              {fork.isPending ? (
-                <ActivityIndicator color={COLORS.surface} />
-              ) : (
-                <>
-                  <Ionicons name="download-outline" size={18} color={COLORS.surface} />
-                  <AppText variant="body" weight="semibold" color={COLORS.surface}>Follow this trip</AppText>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
 
           {/* City vs day grouping (#34) — day needs a start date to anchor Day 1. */}
           {canGroupByDay && stops.length > 0 && (
@@ -502,7 +529,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     onRank={() => rankStop(stop)}
                     saved={savedIds.has(stop.id)}
                     onToggleSave={() => toggleSave.mutate({ id: stop.id, saved: savedIds.has(stop.id) })}
-                    onAddToTrip={() => setPickerItem(stop)}
+                    onMove={() => setMoveItem(stop)}
                     memberIds={tripMemberIds}
                   />
                 ))}
@@ -537,11 +564,64 @@ export function TripDetailScreen({ navigation, route }: Props) {
               </TouchableOpacity>
             </View>
 
-            <LocationSearch value={newLoc} onChange={setNewLoc} />
+            <SegmentedControl segments={KIND_SEGMENTS} value={newKind} onChange={setNewKind} />
+
+            <LocationSearch value={newLoc} onChange={onPickLocation} />
 
             {!!newLoc && (
-              <>
+              <ScrollView keyboardShouldPersistTaps="handled" style={styles.addScroll} contentContainerStyle={styles.addFields}>
+                <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.fieldLabel}>
+                  {newKind === 'stay' ? 'Check-in' : 'Date'}
+                </AppText>
                 <DateField value={newDate} onChange={setNewDate} />
+
+                {newKind === 'stay' && (
+                  <>
+                    <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.fieldLabel}>Check-out</AppText>
+                    <DateField value={checkOut || newDate} onChange={setCheckOut} minimumDate={new Date()} />
+                  </>
+                )}
+
+                {(newKind === 'eat' || newKind === 'transport') && (
+                  <TextInput
+                    style={styles.noteInput}
+                    value={resTime}
+                    onChangeText={setResTime}
+                    placeholder={newKind === 'eat' ? 'Reservation time (HH:MM, optional)' : 'Departure time (HH:MM, optional)'}
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="none"
+                  />
+                )}
+                {newKind === 'eat' && (
+                  <TextInput
+                    style={styles.noteInput}
+                    value={partySize}
+                    onChangeText={setPartySize}
+                    placeholder="Party size (optional)"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="number-pad"
+                  />
+                )}
+                {newKind === 'transport' && (
+                  <TextInput
+                    style={styles.noteInput}
+                    value={carrier}
+                    onChangeText={setCarrier}
+                    placeholder="Carrier / airline (optional)"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                )}
+                {(newKind === 'stay' || newKind === 'eat' || newKind === 'transport') && (
+                  <TextInput
+                    style={styles.noteInput}
+                    value={confirmation}
+                    onChangeText={setConfirmation}
+                    placeholder="Confirmation # (optional)"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="characters"
+                  />
+                )}
+
                 <TextInput
                   style={styles.noteInput}
                   value={newNote}
@@ -550,6 +630,13 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   placeholderTextColor={COLORS.textMuted}
                   multiline
                 />
+
+                {!!previewLabel && (
+                  <AppText variant="subhead" weight="regular" color={COLORS.textSecondary} style={styles.previewLine}>
+                    Adding to <AppText variant="subhead" weight="semibold" color={COLORS.text}>{previewLabel}</AppText>
+                  </AppText>
+                )}
+
                 <TouchableOpacity
                   style={styles.primaryBtn}
                   onPress={() => addStop.mutate()}
@@ -558,20 +645,52 @@ export function TripDetailScreen({ navigation, route }: Props) {
                 >
                   {addStop.isPending
                     ? <ActivityIndicator color={COLORS.surface} />
-                    : <AppText variant="body" weight="semibold" color={COLORS.surface}>Add planned stop</AppText>}
+                    : <AppText variant="body" weight="semibold" color={COLORS.surface}>Add to itinerary</AppText>}
                 </TouchableOpacity>
-              </>
+              </ScrollView>
             )}
 
-            <TouchableOpacity onPress={logExperience} hitSlop={8} style={styles.logLink}>
-              <AppText variant="subhead" color={COLORS.textSecondary}>Or log a ranked experience instead</AppText>
-            </TouchableOpacity>
+            {newKind === 'experience' && (
+              <TouchableOpacity onPress={logExperience} hitSlop={8} style={styles.logLink}>
+                <AppText variant="subhead" color={COLORS.textSecondary}>Or log a ranked experience instead</AppText>
+              </TouchableOpacity>
+            )}
           </View>
         </SheetBackdrop>
       </Modal>
 
-      {/* Visitor "add to my trip" picker */}
-      <TripPickerSheet item={pickerItem} onClose={() => setPickerItem(null)} />
+      {/* Move a stop to a different city section (members) */}
+      <Modal visible={!!moveItem} animationType="slide" transparent onRequestClose={() => setMoveItem(null)}>
+        <SheetBackdrop>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <AppText variant="title">Move to section</AppText>
+              <TouchableOpacity onPress={() => setMoveItem(null)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.list}>
+              {citySections.map((s) => {
+                const current = moveItem?.city_key
+                  ? moveItem.city_key === s.key
+                  : s.items.some((it) => it.id === moveItem?.id);
+                return (
+                  <TouchableOpacity
+                    key={s.key}
+                    style={styles.moveRow}
+                    onPress={() => moveItem && moveSection.mutate({ id: moveItem.id, cityKey: s.key === 'other' ? null : s.key })}
+                    disabled={moveSection.isPending}
+                    activeOpacity={0.7}
+                  >
+                    <AppText variant="body" weight={current ? 'semibold' : 'regular'}>{s.city}</AppText>
+                    {current && <Ionicons name="checkmark" size={18} color={COLORS.brand} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </SheetBackdrop>
+      </Modal>
 
       {/* Roster + invite (#67) */}
       <InviteToTripSheet
@@ -651,10 +770,10 @@ type RowProps = {
   onMoveDown: () => void;
   onDelete: () => void;
   canEdit: boolean;
+  onMove: () => void;
   onRank: () => void;
   saved: boolean;
   onToggleSave: () => void;
-  onAddToTrip: () => void;
   // Tapping the row body opens the experience detail screen.
   onOpen: () => void;
 };
@@ -674,31 +793,40 @@ function rankedLine(stop: RankedExperience, memberIds: Set<string>): string | nu
 }
 
 // One itinerary stop — ONE shared post, showing YOUR ranking when you have one.
-// Members get edit/reorder/delete + "Rank" (which just adds your own ranking to
-// the same post); non-members get "save to Want-to-do" + "add to my trip".
+// Its icon and subtitle come from its `kind` (bed / fork / plane for logistics;
+// sentiment emoji for an experience you've ranked). Members get
+// edit/reorder/delete/move + "Rank" on rankable stops (which just adds your own
+// ranking to the same post); non-members get "save to Want-to-do".
 function ItineraryRow({
-  stop, isShared, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
-  canEdit, onRank, saved, onToggleSave, onAddToTrip, onOpen, memberIds,
+  stop, isShared, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete, onMove,
+  canEdit, onRank, saved, onToggleSave, onOpen, memberIds,
 }: RowProps & { memberIds: Set<string> }) {
-  // "Planned" for YOU: you haven't ranked this, whatever your trip mates did.
+  // "Planned" for YOU: you haven't ranked this, whatever your trip mates did. A
+  // stay/transport is never rankable, so it stays "planned" for everyone.
   const planned = !stop.mine;
   const place = localityLabel(stop);
+  const subtitle = stopSubtitle(stop);
+  const isExperience = stop.kind === 'experience';
   const ranked = rankedLine(stop, memberIds);
   // Everyone else who's ranked it — the shared half of the line.
   const others = stop.rankings.filter((r) => r.user_id !== stop.mine?.user_id);
+  const showRank = canEdit && planned && isRankable(stop.kind);
 
   return (
     <TouchableOpacity style={styles.row} onPress={onOpen} disabled={editing} activeOpacity={0.7}>
       <View style={styles.rowIcon}>
-        {planned ? (
+        {isExperience && !planned ? (
+          <AppText style={styles.rowEmoji}>{sentimentEmoji(stop.mine?.sentiment) || '📍'}</AppText>
+        ) : isExperience ? (
           <Ionicons name="ellipse-outline" size={18} color={COLORS.textMuted} />
         ) : (
-          <AppText style={styles.rowEmoji}>{sentimentEmoji(stop.mine?.sentiment) || '📍'}</AppText>
+          <Ionicons name={kindIcon(stop.kind)} size={18} color={COLORS.textMuted} />
         )}
       </View>
       <View style={styles.rowBody}>
         <AppText variant="body" weight="semibold" numberOfLines={1}>{experienceTitle(stop)}</AppText>
         {!!place && <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1}>{place}</AppText>}
+        {!!subtitle && <AppText variant="caption" color={COLORS.accent} numberOfLines={1} style={styles.rowNote}>{subtitle}</AppText>}
         {planned && !!stop.note && <AppText variant="caption" style={styles.rowNote}>{stop.note}</AppText>}
         {!!stop.mine?.quick_take && <AppText variant="subhead" weight="regular" color={COLORS.text} style={styles.rowQuote}>“{stop.mine.quick_take}”</AppText>}
         {!planned && stop.tags.length > 0 && (
@@ -722,6 +850,9 @@ function ItineraryRow({
       </View>
       {editing ? (
         <View style={styles.rowControls}>
+          <TouchableOpacity onPress={onMove} hitSlop={6}>
+            <Ionicons name="albums-outline" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={onMoveUp} disabled={!canUp} hitSlop={6}>
             <Ionicons name="chevron-up" size={22} color={canUp ? COLORS.textSecondary : COLORS.border} />
           </TouchableOpacity>
@@ -733,17 +864,15 @@ function ItineraryRow({
           </TouchableOpacity>
         </View>
       ) : !canEdit ? (
-        <View style={styles.rowControls}>
-          {stop.rankings.length > 0 && (
-            <TouchableOpacity onPress={onToggleSave} hitSlop={6}>
-              <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.accent} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={onAddToTrip} hitSlop={6}>
-            <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
+        // Visitors can only save a rankable stop to their Wishlist — the old
+        // "add to my trip" + went away with stop-copying (Part 3 of #72), and
+        // logistics were never savable content.
+        stop.rankings.length > 0 && isRankable(stop.kind) ? (
+          <TouchableOpacity onPress={onToggleSave} hitSlop={6}>
+            <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={COLORS.accent} />
           </TouchableOpacity>
-        </View>
-      ) : planned ? (
+        ) : null
+      ) : showRank ? (
         // "Rank" is offered to every member — ranking is opt-in per person, so a
         // stop you skipped never lands in your list.
         <TouchableOpacity style={styles.rankBtn} onPress={onRank} activeOpacity={0.85}>
@@ -808,11 +937,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.brand, borderRadius: RADIUS.md,
     paddingVertical: SPACING.md, marginTop: SPACING.sm,
   },
-  forkBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
-    backgroundColor: COLORS.brand, borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md, marginBottom: SPACING.lg,
-  },
   groupToggle: { marginBottom: SPACING.lg },
   roster: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -844,6 +968,16 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md, alignItems: 'center',
   },
   logLink: { alignItems: 'center', paddingVertical: SPACING.sm },
+  addScroll: { maxHeight: 340 },
+  addFields: { gap: SPACING.md, paddingBottom: SPACING.sm },
+  fieldLabel: { textTransform: 'uppercase', letterSpacing: 0.5 },
+  previewLine: { textAlign: 'center', paddingTop: SPACING.xs },
+  list: { maxHeight: 360 },
+  moveRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLORS.border,
+  },
   editForm: { gap: SPACING.md, paddingTop: SPACING.sm },
   coverPicker: { borderRadius: RADIUS.md, overflow: 'hidden' },
   editCover: { width: '100%', height: 140, borderRadius: RADIUS.md, backgroundColor: COLORS.border },

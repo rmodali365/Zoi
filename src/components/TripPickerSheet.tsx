@@ -3,7 +3,8 @@ import { View, StyleSheet, Modal, ScrollView, TouchableOpacity, Alert } from 're
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Experience } from '@/types';
-import { copyStopToTrip } from '@/lib/trips';
+import { addStopFromPlace } from '@/lib/trips';
+import { primaryLocation } from '@/lib/experienceDisplay';
 import { getMyTrips } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { useBanner } from '@/contexts/BannerContext';
@@ -16,18 +17,21 @@ type Props = {
   onClose: () => void;
 };
 
-// "Add to which trip?" bottom sheet: copies `item` into a trip you own as a fresh
-// planned stop via copyStopToTrip (place + note only — the author's ranking and
-// take stay theirs). Shared by TripDetail, ExperienceDetail and the Wishlist so
-// the inspiration mechanic works wherever an experience is seen (#57/#58).
+// "Add to which trip?" bottom sheet: adds `item`'s place to a trip you own as a
+// fresh planned stop via addStopFromPlace (place + kind only — the author's
+// ranking and take stay theirs, and it's snapped to the right city section of the
+// target trip). Used by the Wishlist so a saved place reaches a trip (#57).
 export function TripPickerSheet({ item, onClose }: Props) {
   const queryClient = useQueryClient();
   const { show } = useBanner();
   const { data: myTrips = [] } = useQuery({ queryKey: qk.myTrips, queryFn: getMyTrips });
 
-  const copyStop = useMutation({
-    mutationFn: ({ toTripId }: { toTripId: string }) =>
-      copyStopToTrip(item as Experience, toTripId),
+  const addStop = useMutation({
+    mutationFn: ({ toTripId }: { toTripId: string }) => {
+      const location = primaryLocation(item as Experience);
+      if (!location) throw new Error('This place has no location to add.');
+      return addStopFromPlace({ tripId: toTripId, location, kind: (item as Experience).kind });
+    },
     onSuccess: (_d, vars) => {
       queryClient.invalidateQueries({ queryKey: qk.trip(vars.toTripId) });
       onClose();
@@ -56,8 +60,8 @@ export function TripPickerSheet({ item, onClose }: Props) {
                 <TouchableOpacity
                   key={t.id}
                   style={styles.row}
-                  onPress={() => copyStop.mutate({ toTripId: t.id })}
-                  disabled={copyStop.isPending}
+                  onPress={() => addStop.mutate({ toTripId: t.id })}
+                  disabled={addStop.isPending}
                   activeOpacity={0.7}
                 >
                   <AppText variant="body" weight="semibold">{t.title}</AppText>
