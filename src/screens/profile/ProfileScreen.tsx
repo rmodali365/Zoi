@@ -99,7 +99,9 @@ export function ProfileScreen({ navigation }: Props) {
   // instead of pushing a second TripDetail copy inside the Profile stack (#48).
   function openTrip(tripId: string) {
     const tabNav = navigation.getParent<NavigationProp<AppTabParamList>>();
-    tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId } });
+    // initial: false keeps ExperiencesHome under TripDetail, so Back returns to the
+    // Experiences list rather than falling through to the tab navigator (Feed).
+    tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId }, initial: false });
   }
 
   function handleSignOut() {

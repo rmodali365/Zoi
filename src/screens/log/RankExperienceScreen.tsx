@@ -114,7 +114,11 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     // Re-ranking is about the list, not the trip — always land on the ranked
     // list so the new position is visible.
     if (draft.trip_id && !rerank) {
-      tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id } });
+      // initial: false puts ExperiencesHome under TripDetail in the List stack.
+      // Without it the stack is rooted AT TripDetail, so Back has nothing to pop
+      // and falls through to the tab navigator (which defaults to the first tab —
+      // the Feed — instead of the Experiences list).
+      tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id }, initial: false });
     } else {
       tabNav?.navigate('List', { screen: 'ExperiencesHome' });
     }
