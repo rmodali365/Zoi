@@ -7,6 +7,8 @@ export const qk = {
   myTrips: ['trips', 'me'] as const,
   myProfile: ['profile', 'me'] as const,
   trip: (id: string) => ['trip', id] as const,
+  tripMembers: (id: string) => ['trip-members', id] as const,
+  tripInvites: ['trip-invites'] as const,
   experience: (id: string) => ['experience', id] as const,
   notifications: ['notifications'] as const,
   notificationsUnread: ['notifications', 'unread'] as const,

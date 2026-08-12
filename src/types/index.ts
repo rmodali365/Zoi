@@ -51,6 +51,25 @@ export interface Trip {
   // Joined
   user?: User;
   experiences?: Experience[];
+  // Everyone in the trip besides the owner (collaborative trips). Only loaded
+  // where the roster is shown — TripDetail, trip cards.
+  members?: TripMember[];
+}
+
+// Where an invited person stands. Only 'joined' grants write capability (RLS).
+export type TripMemberStatus = 'invited' | 'joined' | 'declined';
+
+// A person in a shared trip. The OWNER is trips.user_id and never appears here,
+// which is why there's no role — there's nothing to escalate to.
+export interface TripMember {
+  trip_id: string;
+  user_id: string;
+  status: TripMemberStatus;
+  invited_by: string | null;
+  created_at: string;
+  // Joined
+  user?: User;
+  trip?: Trip;
 }
 
 export interface Experience {
@@ -81,6 +100,11 @@ export interface Experience {
   trip_position: string | null;
   // Optional reminder text on a planned stop.
   note: string | null;
+  // Links the rows different people logged for the SAME real-world outing. Each
+  // participant keeps their own row (own sentiment, rank_key, quick take) — a
+  // group is never one shared row, because one ranked list per user is the whole
+  // model. Null = solo.
+  group_id: string | null;
   // When the experience happened (ranked) or is planned for (planned stop).
   // 'YYYY-MM-DD'; defaults to the log date.
   experience_date: string;

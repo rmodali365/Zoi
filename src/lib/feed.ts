@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { getFollowingIds } from '@/lib/follows';
-import { Experience, Trip } from '@/types';
+import { getTripIdsForMembers } from '@/lib/tripMembers';
+import { Experience, Trip, User } from '@/types';
 import { primaryLocation } from '@/lib/experienceDisplay';
 
 export type FeedItem = Experience & {
@@ -14,6 +15,9 @@ export type FeedTrip = Trip & {
   stopCount: number;
   plannedCount: number;
   cities: string[];
+  // Everyone building this trip (owner first) — a shared trip is credited to the
+  // whole group, not just whoever created it.
+  builders: Pick<User, 'id' | 'name' | 'handle' | 'avatar_url'>[];
 };
 
 // The feed mixes ranked experiences and (non-empty) trips, newest first.
@@ -28,6 +32,10 @@ export async function getFeed(): Promise<FeedEntry[]> {
   const followingIds = [...(await getFollowingIds())];
   if (followingIds.length === 0) return [];
 
+  // A shared trip belongs to everyone building it, so it should reach the
+  // followers of any member — not only the creator's.
+  const sharedTripIds = await getTripIdsForMembers(followingIds);
+
   const [expRes, tripRes] = await Promise.all([
     supabase
       .from('experiences')
@@ -36,11 +44,22 @@ export async function getFeed(): Promise<FeedEntry[]> {
       // Feed shows ranked experiences only — never planned trip stops.
       .eq('status', 'ranked')
       .order('rank_key', { ascending: true }),
-    supabase
-      .from('trips')
-      .select('*, user:users(id, name, handle, avatar_url), experiences(id, status, location, locations)')
-      .in('user_id', followingIds)
-      .order('created_at', { ascending: false }),
+    // Name the owner FK: `trips` now has two paths to `users` (owner FK + the
+    // many-to-many via trip_members), so a bare `users(...)` is ambiguous
+    // (PGRST201), the same gotcha experiences↔users already had.
+    (() => {
+      const q = supabase
+        .from('trips')
+        .select(
+          '*, user:users!trips_user_id_fkey(id, name, handle, avatar_url)'
+          + ', members:trip_members(status, user:users!trip_members_user_id_fkey(id, name, handle, avatar_url))'
+          + ', experiences(id, status, location, locations)',
+        );
+      return (sharedTripIds.length > 0
+        ? q.or(`user_id.in.(${followingIds.join(',')}),id.in.(${sharedTripIds.join(',')})`)
+        : q.in('user_id', followingIds)
+      ).order('created_at', { ascending: false });
+    })(),
   ]);
   if (expRes.error) throw expRes.error;
   if (tripRes.error) throw tripRes.error;
@@ -62,11 +81,22 @@ export async function getFeed(): Promise<FeedEntry[]> {
     };
   });
 
-  type TripRow = Trip & { experiences?: Pick<Experience, 'id' | 'status' | 'location' | 'locations'>[] };
-  for (const t of (tripRes.data ?? []) as TripRow[]) {
+  type FeedMember = { status: string; user: FeedTrip['builders'][number] | null };
+  // The member embed is a projection, not full TripMember rows, so `members` is
+  // replaced rather than intersected.
+  type TripRow = Omit<Trip, 'members'> & {
+    experiences?: Pick<Experience, 'id' | 'status' | 'location' | 'locations'>[];
+    members?: FeedMember[];
+  };
+  // Cast through unknown: the nested member→user embed is deeper than the
+  // generated PostgREST result types model.
+  for (const t of (tripRes.data ?? []) as unknown as TripRow[]) {
     const stops = t.experiences ?? [];
     if (stops.length === 0) continue; // an empty itinerary isn't feed-worthy
     const cities = [...new Set(stops.map((s) => primaryLocation(s)?.city).filter((c): c is string => !!c))];
+    const joined = (t.members ?? [])
+      .filter((m) => m.status === 'joined' && m.user)
+      .map((m) => m.user as FeedTrip['builders'][number]);
     entries.push({
       kind: 'trip',
       id: `trip-${t.id}`,
@@ -74,9 +104,11 @@ export async function getFeed(): Promise<FeedEntry[]> {
       trip: {
         ...t,
         experiences: undefined, // partial stop rows — don't leak them past the summary
+        members: undefined,     // summarized into `builders` below
         stopCount: stops.length,
         plannedCount: stops.filter((s) => s.status === 'planned').length,
         cities,
+        builders: [...(t.user ? [t.user] : []), ...joined],
       },
     });
   }

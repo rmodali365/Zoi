@@ -63,6 +63,9 @@ src/
                             #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
     follows.ts              # search users, follow/unfollow, counts, lists, getSuggestedUsers
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
+    tripMembers.ts          # collaborative trips: roster, invite/accept/decline, leave/remove,
+                            #   joined-trip ids (feeds getMyTrips + the feed)
+    ids.ts                  # newGroupId() — client-side uuid for experiences.group_id
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
     notifications.ts        # in-app activity: follow/save events (written by DB triggers)
@@ -149,6 +152,33 @@ Two entity types (NO "buckets"):
   ranked itself. Has title/destination/dates/cover_photo. TripDetail renders city-grouped
   sections ordered by `trip_position` (`groupByCity` in `lib/trips.ts`), with an optional
   day-grouped view (`groupByDay` over `experience_date`) when the trip has a start date.
+  Trips can be **collaborative** — see below.
+
+### Collaborative trips (#67)
+A trip can have members: `trip_members (trip_id, user_id, status, invited_by)`. The
+**owner is `trips.user_id` and never has a member row**, which is why there's no role
+column — there's nothing to escalate to. Only `status = 'joined'` grants write access.
+
+The load-bearing rule: **one ranked list per user survives collaboration.** A stop is
+never one shared row that several people rank — each participant gets their OWN
+`experiences` row (own `sentiment`, `rank_key`, `quick_take`), linked by
+**`experiences.group_id`**. `groupStops()` collapses those rows into a `StopGroup` so
+the itinerary shows one line per real-world stop, displaying *your* row when you have
+one. Ranking a stop a trip mate added goes through `claimStopForRanking()`, which
+inserts your own row in the same group and hands off to the normal graduate flow — we
+never flip someone else's row. Ranking is opt-in per person: skipping a stop is normal,
+so nothing lands in your list that you didn't do.
+
+Capabilities (RLS, verified by a behavioural test — see the migration):
+- Any joined member: add stops, reorder ANY stop, edit trip details, invite others.
+- Any joined member: **delete any planned stop**, including a trip mate's — planning is
+  shared scratch work.
+- Nobody but the owner touches a **ranked** row: no editing, ranking, detaching or
+  deleting someone else's. `guard_foreign_stop_update()` is the column-level guard behind
+  the broad "Members reorder shared trip stops" policy (RLS can't scope to columns) —
+  a non-owner may change `trip_position` and nothing else.
+- `getMyTrips` unions owned + joined trips; the feed surfaces a shared trip to the
+  followers of every member, credited to all of them (`FeedTrip.builders`).
 
 **Planned → ranked ("graduation"):** a planned stop becomes a real ranked experience via
 the normal rank flow with `experienceId` set — `graduatePlannedStop` flips the same row in
@@ -257,7 +287,10 @@ change — it's a generated snapshot. To change the schema:
 ### PostgREST embed gotcha
 `experiences` ↔ `users` has TWO relationships (author FK + many-to-many via `saves`), so an
 embed must name the FK explicitly: `user:users!experiences_user_id_fkey(...)`. A bare
-`users(...)` errors with PGRST201 (ambiguous). `trips` embed is unambiguous.
+`users(...)` errors with PGRST201 (ambiguous). **Since `trip_members` landed, `trips` ↔
+`users` is ambiguous too** (owner FK + many-to-many through members) — always
+`user:users!trips_user_id_fkey(...)`. Same for `trip_members` itself, which reaches
+`users` via both `user_id` and `invited_by`.
 
 ## Edge Functions
 

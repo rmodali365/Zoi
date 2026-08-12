@@ -12,6 +12,7 @@ import { Experience, ExperiencesStackParamList } from '@/types';
 import { TAG_LABELS } from '@/constants/experiences';
 import { getSaves, getSaveCounts, unsaveExperience } from '@/lib/saves';
 import { getMyExperiences, getMyTrips } from '@/lib/me';
+import { getMembersByTrip } from '@/lib/tripMembers';
 import { qk } from '@/lib/queryKeys';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
 import { TripCard } from '@/components/TripCard';
@@ -85,6 +86,13 @@ export function MyListScreen({ navigation }: Props) {
   const { data: trips = [], refetch: refetchTrips } = useQuery({
     queryKey: qk.myTrips,
     queryFn: getMyTrips,
+  });
+  // Rosters for the trip cards, in one query rather than one per card (#67).
+  const tripIds = trips.map((t) => t.id);
+  const { data: membersByTrip = {} } = useQuery({
+    queryKey: qk.tripMembers(tripIds.join(',')),
+    queryFn: () => getMembersByTrip(tripIds),
+    enabled: tripIds.length > 0,
   });
 
   // Reset to the default view (ranked list) when leaving the tab. With caching there's
@@ -278,6 +286,7 @@ export function MyListScreen({ navigation }: Props) {
                 <TripCard
                   key={trip.id}
                   trip={trip}
+                  members={membersByTrip[trip.id]}
                   onPress={() => navigation.navigate('TripDetail', { tripId: trip.id })}
                 />
               ))}

@@ -1,21 +1,26 @@
 import { supabase } from '@/lib/supabase';
-import { Experience } from '@/types';
+import { Experience, Trip } from '@/types';
 import { UserResult } from '@/lib/follows';
 
 // In-app activity (#59). Rows are written server-side by DB triggers on follows
 // and saves inserts — the client only reads and marks them.
 
+export type NotificationType = 'follow' | 'save' | 'trip_invite' | 'trip_join';
+
 export type Notification = {
   id: string;
   user_id: string;
   actor_id: string;
-  type: 'follow' | 'save';
+  type: NotificationType;
   experience_id: string | null;
+  // Set on trip_invite / trip_join (#67).
+  trip_id: string | null;
   read: boolean;
   created_at: string;
   // Joined
   actor: UserResult | null;
   experience: Experience | null;
+  trip: Trip | null;
 };
 
 // Newest-first activity for the current user (RLS scopes to own rows).
@@ -24,7 +29,10 @@ export type Notification = {
 export async function getNotifications(): Promise<Notification[]> {
   const { data, error } = await supabase
     .from('notifications')
-    .select('*, actor:users!notifications_actor_id_fkey(id, name, handle, avatar_url), experience:experiences(*)')
+    .select(
+      '*, actor:users!notifications_actor_id_fkey(id, name, handle, avatar_url)'
+      + ', experience:experiences(*), trip:trips(*)',
+    )
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;
