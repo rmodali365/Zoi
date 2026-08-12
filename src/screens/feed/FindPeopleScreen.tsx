@@ -140,6 +140,7 @@ export function FindPeopleScreen({ navigation }: Props) {
       <FlatList
         data={query.trim().length > 0 ? results : contacts ?? []}
         keyExtractor={(item) => item.id}
+        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
         ListHeaderComponent={

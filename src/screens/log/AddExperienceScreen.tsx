@@ -13,6 +13,7 @@ import { LocationSearch } from '@/components/LocationSearch';
 import { AppText } from '@/components/ui/AppText';
 import { Chip } from '@/components/ui/Chip';
 import { DateField } from '@/components/ui/DateField';
+import { FormScrollView } from '@/components/ui/FormScrollView';
 import { todayString } from '@/lib/dates';
 import { getExperience, updateExperience } from '@/lib/experiences';
 import { getMyTrips } from '@/lib/me';
@@ -235,7 +236,7 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
         )}
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <FormScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {mode === 'graduate' && (
           <View style={styles.graduateBanner}>
             <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}>
@@ -367,7 +368,7 @@ function ExperienceForm({ navigation, mode, presetTripId = null, experienceId }:
             </View>
           </View>
         ) : null}
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

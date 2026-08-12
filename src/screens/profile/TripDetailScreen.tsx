@@ -33,6 +33,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { AvatarStack } from '@/components/ui/AvatarStack';
 import { DateField } from '@/components/ui/DateField';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 // TripDetail is registered in both the Profile and Experiences stacks, so type
@@ -522,7 +523,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
       {/* Add-stop modal */}
       <Modal visible={adding} animationType="slide" transparent onRequestClose={closeAdd}>
-        <View style={styles.modalBackdrop}>
+        <SheetBackdrop>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <AppText variant="title">Add a stop</AppText>
@@ -561,7 +562,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               <AppText variant="subhead" color={COLORS.textSecondary}>Or log a ranked experience instead</AppText>
             </TouchableOpacity>
           </View>
-        </View>
+        </SheetBackdrop>
       </Modal>
 
       {/* Visitor "add to my trip" picker */}
@@ -579,7 +580,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
 
       {/* Edit trip details (owner) */}
       <Modal visible={editingTrip} animationType="slide" transparent onRequestClose={() => setEditingTrip(false)}>
-        <View style={styles.modalBackdrop}>
+        <SheetBackdrop>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <AppText variant="title">Edit trip</AppText>
@@ -628,7 +629,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </SheetBackdrop>
       </Modal>
     </SafeAreaView>
   );
@@ -816,7 +817,6 @@ const styles = StyleSheet.create({
   empty: { paddingTop: SPACING.xxl, alignItems: 'center', gap: SPACING.sm },
   emptyTitle: { textAlign: 'center' },
   emptyBody: { textAlign: 'center', lineHeight: 22 },
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: COLORS.overlay },
   sheet: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,

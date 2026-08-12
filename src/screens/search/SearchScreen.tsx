@@ -61,6 +61,7 @@ export function SearchScreen({ navigation }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
+        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

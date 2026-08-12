@@ -11,6 +11,7 @@ import { qk } from '@/lib/queryKeys';
 import { useBanner } from '@/contexts/BannerContext';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -73,7 +74,7 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
+      <SheetBackdrop>
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
             <AppText variant="title">On this trip</AppText>
@@ -151,13 +152,12 @@ export function InviteToTripSheet({ visible, trip, members, owner, isOwner, onCl
             })}
           </ScrollView>
         </View>
-      </View>
+      </SheetBackdrop>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: COLORS.overlay },
   sheet: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg,

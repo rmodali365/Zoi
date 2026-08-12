@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LogStackParamList } from '@/types';
 import { AppText } from '@/components/ui/AppText';
+import { FormScrollView } from '@/components/ui/FormScrollView';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { getMyUserId } from '@/lib/auth';
 import { uploadExperiencePhotos } from '@/lib/storage';
@@ -103,7 +104,7 @@ export function StartTripScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <FormScrollView contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.coverPicker} onPress={pickCover} activeOpacity={0.85}>
           {coverUri ? (
             <Image source={{ uri: coverUri }} style={styles.cover} />
@@ -169,7 +170,7 @@ export function StartTripScreen({ navigation }: Props) {
           A trip is a container for an itinerary. Add planned stops or log experiences into it —
           each experience still gets ranked on its own.
         </AppText>
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }
