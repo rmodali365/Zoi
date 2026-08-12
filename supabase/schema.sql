@@ -58,6 +58,9 @@ create table public.trips (
   user_id uuid references public.users(id) on delete cascade not null,
   title text not null,
   destination text,
+  -- Picked-place anchor for the destination (Location shape); keeps `destination`
+  -- as the display string (see migration 20260812000000_stop_kinds_and_city_keys).
+  destination_location jsonb,
   start_date date,
   end_date date,
   cover_photo text,
@@ -89,6 +92,15 @@ create table public.experiences (
   -- 'ranked' = logged + ranked. Planned stops are hidden from ranked surfaces
   -- (see migration 20260609010000_experience_status_and_trip_position).
   status text not null default 'ranked' check (status in ('planned', 'ranked')),
+  -- What a stop *is*, orthogonal to status. 'stay'/'transport' is logistics and
+  -- never ranked; 'eat'/'other' may be ranked (see migration
+  -- 20260812000000_stop_kinds_and_city_keys).
+  kind text not null default 'experience'
+    check (kind in ('experience','stay','eat','transport','other')),
+  -- Kind-specific extras (check-in/out, reservation time, confirmation…).
+  details jsonb not null default '{}'::jsonb,
+  -- Canonical city section key this stop is grouped under within its trip.
+  city_key text,
   -- Coarse gut reaction; seeds the starting third of the overall ranked list.
   -- Null for planned stops.
   sentiment text check (sentiment in ('loved', 'liked', 'fine')),
@@ -115,7 +127,10 @@ create table public.experiences (
   -- Backfilled from created_at (see migration 20260702000000_experience_date).
   experience_date date not null default current_date,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  -- A stay or transport stop is never ranked content — it must stay 'planned'.
+  constraint experiences_kind_rankable
+    check (kind not in ('stay','transport') or status = 'planned')
 );
 
 alter table public.experiences enable row level security;
@@ -140,6 +155,12 @@ create index experiences_trip
 -- Index for fetching a trip's itinerary in order
 create index experiences_trip_position
   on public.experiences (trip_id, trip_position);
+
+-- Indexes for kind + city-section grouping within a trip (#72)
+create index experiences_trip_kind_idx
+  on public.experiences (trip_id, kind);
+create index experiences_trip_city_idx
+  on public.experiences (trip_id, city_key);
 
 create trigger experiences_updated_at
   before update on public.experiences

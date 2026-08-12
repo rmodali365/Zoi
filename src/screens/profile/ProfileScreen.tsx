@@ -18,6 +18,7 @@ import { getFollowCounts } from '@/lib/follows';
 import { updateAvatar } from '@/lib/users';
 import { signOut } from '@/lib/auth';
 import { AppText } from '@/components/ui/AppText';
+import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -133,11 +134,7 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handlePickAvatar} activeOpacity={0.8}>
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]} />
-            )}
+            <Avatar uri={profile?.avatar_url} size={64} />
             <View style={styles.cameraBadge}>
               {uploading
                 ? <ActivityIndicator size="small" color={COLORS.background} />
@@ -279,8 +276,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.lg,
     gap: SPACING.md,
   },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.border },
-  avatarPlaceholder: { backgroundColor: COLORS.border },
   cameraBadge: {
     position: 'absolute', bottom: -2, right: -2,
     width: 24, height: 24, borderRadius: 12,

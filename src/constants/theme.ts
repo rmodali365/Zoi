@@ -50,4 +50,6 @@ export const FONT_SIZE = {
   headline: 17,
   title: 20,
   display: 28,
+  // Brand wordmark ("Zoi") — splash + Welcome hero only, not part of the UI scale.
+  wordmark: 64,
 };

@@ -1,8 +1,9 @@
 import { supabase } from '@/lib/supabase';
-import { Trip, Experience, Location } from '@/types';
-import { primaryLocation, localityLabel, experienceTitle } from '@/lib/experienceDisplay';
+import { Trip, Experience, Location, StopKind, StopDetails } from '@/types';
+import { primaryLocation, localityLabel } from '@/lib/experienceDisplay';
+import { cityKey, resolveTripCity } from '@/lib/cities';
 import { keyAfter, keyBefore, keyBetween, initialRankKey } from '@/lib/ranking';
-import { daysBetween, formatDay } from '@/lib/dates';
+import { daysBetween, formatDay, todayString } from '@/lib/dates';
 import { haptics } from '@/lib/haptics';
 
 export type TripDetail = { trip: Trip | null; items: Experience[] };
@@ -39,6 +40,7 @@ export function parseDateInput(s: string): string | null {
 export async function createTrip(fields: {
   title: string;
   destination: string | null;
+  destination_location: Location | null;
   start_date: string | null;
   end_date: string | null;
   cover_photo: string | null;
@@ -57,29 +59,41 @@ export async function createTrip(fields: {
 // Update a trip's editable fields (owner only, enforced by RLS).
 export async function updateTrip(
   tripId: string,
-  fields: Partial<Pick<Trip, 'title' | 'destination' | 'start_date' | 'end_date' | 'cover_photo'>>,
+  fields: Partial<Pick<Trip, 'title' | 'destination' | 'destination_location' | 'start_date' | 'end_date' | 'cover_photo'>>,
 ): Promise<void> {
   const { error } = await supabase.from('trips').update(fields).eq('id', tripId);
   if (error) throw error;
 }
 
-export type CitySection = { city: string; items: Experience[] };
+// `key` is the stable grouping key (a resolved city_key, or 'other' when a stop
+// has no usable city); `city` is the nicest display label seen for that key.
+export type CitySection = { key: string; city: string; items: Experience[] };
 
-// Group itinerary items into city sections. Input is assumed already ordered by
-// trip_position, so a city's order = where its first stop falls (your "ordered by
-// which city came first" rule), and items keep their within-city order.
+// Group itinerary items into city sections keyed by the stored `city_key` (Part 2
+// of #72), falling back to a key derived from the location for legacy/unresolved
+// rows. Input is assumed already ordered by trip_position, so a section's order =
+// where its first stop falls, and items keep their within-city order. The
+// unresolved "Other" bucket is sorted last.
 export function groupByCity(items: Experience[]): CitySection[] {
   const sections: CitySection[] = [];
-  const indexByCity: Record<string, number> = {};
+  const indexByKey: Record<string, number> = {};
   for (const item of items) {
-    const city = primaryLocation(item)?.city || localityLabel(item) || 'Other';
-    if (indexByCity[city] === undefined) {
-      indexByCity[city] = sections.length;
-      sections.push({ city, items: [] });
+    const loc = primaryLocation(item);
+    const key = item.city_key || cityKey(loc) || 'other';
+    const label = loc?.city || localityLabel(item) || 'Other';
+    let idx = indexByKey[key];
+    if (idx === undefined) {
+      idx = sections.length;
+      indexByKey[key] = idx;
+      sections.push({ key, city: label, items: [] });
+    } else if (sections[idx].city === 'Other' && label !== 'Other') {
+      // Prefer the nicest (non-"Other") label seen for this key.
+      sections[idx].city = label;
     }
-    sections[indexByCity[city]].items.push(item);
+    sections[idx].items.push(item);
   }
-  return sections;
+  // Keep trip_position order, but push the unresolved bucket to the end (stable).
+  return sections.sort((a, b) => (a.key === 'other' ? 1 : 0) - (b.key === 'other' ? 1 : 0));
 }
 
 export type DaySection = { key: string; label: string; items: Experience[] };
@@ -141,25 +155,61 @@ export function positionToMoveDown(items: Experience[], idx: number): string | n
 
 // --- Mutations ---
 
-// Add an unranked planned stop to a trip from a picked place.
-export async function addPlannedStop(args: {
-  tripId: string; location: Location; note: string | null; position: string;
-  // When the stop is planned for ('YYYY-MM-DD'); the UI defaults it to today.
-  date: string;
+// Add an unranked planned stop to a trip from a picked place — the single path
+// for adding any stop by hand OR from the Wishlist (Part 3 of #72 replaced the
+// old row-copy with this). Resolves the stop's city section against the trip's
+// existing sections so a hotel lands under the city heading that's already there;
+// pass `cityKey` to override (a caller that already resolved it, or "move to
+// section"). Appends to the end of the itinerary.
+export async function addStopFromPlace(args: {
+  tripId: string;
+  location: Location;
+  kind?: StopKind;
+  details?: StopDetails;
+  note?: string | null;
+  // When the stop is planned for ('YYYY-MM-DD'); defaults to today.
+  date?: string;
+  // Explicit section key. `undefined` = resolve internally; a string/null overrides.
+  cityKey?: string | null;
 }): Promise<void> {
+  haptics.lightTap();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
+
+  const [{ data: trip }, { data: rows }] = await Promise.all([
+    supabase.from('trips').select('destination_location').eq('id', args.tripId).maybeSingle(),
+    supabase.from('experiences').select('*').eq('trip_id', args.tripId),
+  ]);
+  const items = (rows ?? []) as Experience[];
+  const resolvedKey =
+    args.cityKey !== undefined
+      ? args.cityKey
+      : resolveTripCity(args.location, groupByCity(items), (trip as Pick<Trip, 'destination_location'>) ?? null);
+
   const { error } = await supabase.from('experiences').insert({
     user_id: user.id,
     status: 'planned',
+    kind: args.kind ?? 'experience',
+    details: args.details ?? {},
     trip_id: args.tripId,
     title: args.location.name,
     locations: [args.location],
     location: args.location,
-    note: args.note,
-    trip_position: args.position,
-    experience_date: args.date,
+    note: args.note ?? null,
+    trip_position: nextTripPosition(items),
+    city_key: resolvedKey,
+    experience_date: args.date ?? todayString(),
   });
+  if (error) throw error;
+}
+
+// Reassign a stop to a section by hand ("Move to section"). Writes city_key
+// directly so a manual correction sticks across refetches.
+export async function setStopCity(itemId: string, cityKey: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('experiences')
+    .update({ city_key: cityKey })
+    .eq('id', itemId);
   if (error) throw error;
 }
 
@@ -184,74 +234,4 @@ export async function setTripPosition(itemId: string, position: string): Promise
     .update({ trip_position: position })
     .eq('id', itemId);
   if (error) throw error;
-}
-
-// Copy another user's stop into one of your own trips as a fresh planned stop
-// (place + note only — the original's ranking/quick take are left behind). Lands
-// at the end of the target trip's itinerary.
-export async function copyStopToTrip(item: Experience, tripId: string): Promise<void> {
-  haptics.lightTap();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
-  const { data: rows } = await supabase
-    .from('experiences').select('trip_position, rank_key').eq('trip_id', tripId);
-  const ps = (rows ?? [])
-    .map((r) => r.trip_position ?? r.rank_key)
-    .filter((p): p is string => !!p)
-    .sort();
-  const position = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
-  const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
-  const { error } = await supabase.from('experiences').insert({
-    user_id: user.id,
-    status: 'planned',
-    trip_id: tripId,
-    title: item.title ?? locs[0]?.name ?? 'Stop',
-    locations: locs,
-    location: locs[0] ?? null,
-    note: item.note,
-    trip_position: position,
-  });
-  if (error) throw error;
-}
-
-// "Follow this trip": duplicate someone else's whole itinerary into a NEW trip you
-// own. Every stop lands as `planned` (place, title, note kept; the owner's rankings,
-// quick takes, photos and dates stay behind). Returns the new trip's id.
-export async function forkTrip(source: Trip, items: Experience[]): Promise<string> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
-
-  const { data: t, error } = await supabase
-    .from('trips')
-    .insert({
-      user_id: user.id,
-      title: source.title,
-      destination: source.destination,
-      cover_photo: source.cover_photo,
-    })
-    .select('id')
-    .single();
-  if (error || !t) throw error ?? new Error('Could not copy trip.');
-
-  let pos = initialRankKey();
-  const rows = items.map((item) => {
-    const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
-    const row = {
-      user_id: user.id,
-      status: 'planned',
-      trip_id: t.id,
-      title: experienceTitle(item),
-      locations: locs,
-      location: locs[0] ?? null,
-      note: item.note,
-      trip_position: pos,
-    };
-    pos = keyAfter(pos);
-    return row;
-  });
-  if (rows.length > 0) {
-    const { error: stopsError } = await supabase.from('experiences').insert(rows);
-    if (stopsError) throw stopsError;
-  }
-  return t.id;
 }
