@@ -6,6 +6,19 @@ export type Sentiment = 'loved' | 'liked' | 'fine';
 // Experience lifecycle — 'planned' stops live in a trip but aren't ranked yet.
 export type ExperienceStatus = 'planned' | 'ranked';
 
+// What a trip stop *is*, orthogonal to `status` (its lifecycle). A `stay` or
+// `transport` is logistics — never ranked content; `eat`/`other` are rankable
+// but not required to be; `experience` is the default (today's behaviour).
+export type StopKind = 'experience' | 'stay' | 'eat' | 'transport' | 'other';
+
+// Kind-specific extras, stored in the `details` jsonb (no DB-level shape check —
+// matches how `locations` is handled). A discriminated-ish union by kind.
+export type StopDetails =
+  | { check_in?: string; check_out?: string; confirmation?: string } // stay ('YYYY-MM-DD')
+  | { time?: string; party_size?: number; confirmation?: string }    // eat ('HH:MM')
+  | { time?: string; carrier?: string; confirmation?: string }       // transport
+  | Record<string, never>;
+
 export type Tag =
   | 'outdoors' | 'drinks' | 'culture' | 'nightlife' | 'active' | 'chill' | 'food-adjacent'
   | 'wine' | 'beach' | 'ski' | 'food-focused' | 'scenic-drive'
@@ -36,6 +49,12 @@ export interface Location {
   region?: string | null;
   country?: string | null;
   formattedAddress?: string | null;
+  // Canonical city grouping key (slug|region|country), resolved server-side from
+  // Google address components. Separate from the display `city`. See lib/cities.ts.
+  city_key?: string | null;
+  // Google Place types, used to auto-detect a stop's kind (lib/stops.ts).
+  types?: string[] | null;
+  primaryType?: string | null;
 }
 
 export interface Trip {
@@ -43,6 +62,9 @@ export interface Trip {
   user_id: string;
   title: string;
   destination: string | null;
+  // Picked-place anchor for the destination (keeps `destination` as the display
+  // string). Gives city resolution a coordinate to snap a trip's first stop to.
+  destination_location: Location | null;
   start_date: string | null;
   end_date: string | null;
   cover_photo: string | null;
@@ -59,6 +81,14 @@ export interface Experience {
   // Lifecycle: 'planned' = a trip stop not yet ranked; 'ranked' = logged + ranked.
   // Planned stops are hidden from all ranked surfaces (filtered by status).
   status: ExperienceStatus;
+  // What this stop is (defaults to 'experience'). A 'stay'/'transport' never
+  // becomes ranked content; 'eat'/'other' may be ranked, but aren't required to.
+  kind: StopKind;
+  // Kind-specific extras (check-in/out, reservation time, confirmation…).
+  details: StopDetails;
+  // Canonical city grouping key for this stop within its trip (see lib/cities.ts).
+  // Null until resolved; grouping falls back to the location's derived city.
+  city_key: string | null;
   // Null for planned stops (they have no sentiment until ranked).
   sentiment: Sentiment | null;
   // Optional membership in a trip container

@@ -6,12 +6,18 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LogStackParamList } from '@/types';
+import { LogStackParamList, Location } from '@/types';
 import { AppText } from '@/components/ui/AppText';
+import { LocationSearch } from '@/components/LocationSearch';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 import { getMyUserId } from '@/lib/auth';
 import { uploadExperiencePhotos } from '@/lib/storage';
 import { createTrip, parseDateInput } from '@/lib/trips';
+
+// Display label for a picked destination place ("Lisbon, Portugal").
+function destinationLabel(loc: Location): string {
+  return [loc.city || loc.name, loc.region, loc.country].filter(Boolean).slice(0, 2).join(', ');
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<LogStackParamList, 'StartTrip'>;
@@ -19,7 +25,7 @@ type Props = {
 
 export function StartTripScreen({ navigation }: Props) {
   const [title, setTitle] = useState('');
-  const [destination, setDestination] = useState('');
+  const [destinationLoc, setDestinationLoc] = useState<Location | null>(null);
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -71,7 +77,8 @@ export function StartTripScreen({ navigation }: Props) {
     try {
       tripId = await createTrip({
         title: title.trim(),
-        destination: destination.trim() || null,
+        destination: destinationLoc ? destinationLabel(destinationLoc) : null,
+        destination_location: destinationLoc,
         start_date: start,
         end_date: end,
         cover_photo: coverUrl,
@@ -128,14 +135,7 @@ export function StartTripScreen({ navigation }: Props) {
 
         <View style={styles.field}>
           <AppText variant="caption" weight="medium" color={COLORS.textSecondary} style={styles.label}>Destination (optional)</AppText>
-          <TextInput
-            style={styles.input}
-            value={destination}
-            onChangeText={setDestination}
-            placeholder="Lisbon, Portugal"
-            placeholderTextColor={COLORS.textMuted}
-            autoCorrect={false}
-          />
+          <LocationSearch value={destinationLoc} onChange={setDestinationLoc} />
         </View>
 
         <View style={styles.dateRow}>

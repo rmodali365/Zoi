@@ -12,11 +12,11 @@ import {
   experienceTitle, localityLabel, primaryLocation, sentimentEmoji, sentimentLabel,
 } from '@/lib/experienceDisplay';
 import { formatDay } from '@/lib/dates';
+import { kindIcon, kindLabel, stopSubtitle } from '@/lib/stops';
 import { getExperience, deleteExperience } from '@/lib/experiences';
 import { getMyProfile } from '@/lib/me';
 import { getSavedIds, getSaveCounts, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
-import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -37,8 +37,6 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
   const [photoIndex, setPhotoIndex] = useState(0);
-  // Visitor "add to my trip" — copies this experience as a planned stop (#58).
-  const [addingToTrip, setAddingToTrip] = useState(false);
 
   const { data: exp, isLoading } = useQuery({
     queryKey: qk.experience(experienceId),
@@ -126,6 +124,14 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   const hasPin =
     !!pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && !(pin.lat === 0 && pin.lng === 0);
   const ranked = exp.status === 'ranked';
+  // Logistics kinds (stay / eat / transport) show a details header instead of a
+  // rank strip: dates/time + confirmation, from the `details` jsonb.
+  const isLogistics = exp.kind !== 'experience' && exp.kind !== 'other';
+  const stopLine = stopSubtitle(exp);
+  const confirmation =
+    typeof (exp.details as Record<string, unknown>)?.confirmation === 'string'
+      ? ((exp.details as Record<string, string>).confirmation)
+      : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -149,20 +155,15 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.visitorActions}>
-            {ranked && (
-              <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
-                <Ionicons
-                  name={saved ? 'bookmark' : 'bookmark-outline'}
-                  size={22}
-                  color={saved ? COLORS.brand : COLORS.text}
-                />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => setAddingToTrip(true)} hitSlop={8} activeOpacity={0.7}>
-              <Ionicons name="add-circle-outline" size={24} color={COLORS.brand} />
+          ranked && (
+            <TouchableOpacity onPress={() => toggleSave.mutate()} hitSlop={8} activeOpacity={0.7}>
+              <Ionicons
+                name={saved ? 'bookmark' : 'bookmark-outline'}
+                size={22}
+                color={saved ? COLORS.brand : COLORS.text}
+              />
             </TouchableOpacity>
-          </View>
+          )
         )}
       </View>
 
@@ -215,6 +216,22 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
           <AppText variant="display" style={styles.title}>{experienceTitle(exp)}</AppText>
           {!!localityLabel(exp) && (
             <AppText variant="body" color={COLORS.textSecondary}>{localityLabel(exp)}</AppText>
+          )}
+
+          {/* Logistics header (stay / eat / transport) — no rank, no sentiment. */}
+          {isLogistics && (
+            <View style={styles.logisticsStrip}>
+              <Ionicons name={kindIcon(exp.kind)} size={22} color={COLORS.accent} />
+              <View style={styles.logisticsInfo}>
+                <AppText variant="body" weight="semibold">{kindLabel(exp.kind)}</AppText>
+                {!!stopLine && <AppText variant="caption" color={COLORS.textSecondary}>{stopLine}</AppText>}
+              </View>
+              {!!confirmation && (
+                <View style={styles.confirmChip}>
+                  <AppText variant="footnote" weight="medium" color={COLORS.textSecondary}>#{confirmation}</AppText>
+                </View>
+              )}
+            </View>
           )}
 
           {/* Rank strip */}
@@ -317,8 +334,6 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
           )}
         </View>
       </ScrollView>
-
-      <TripPickerSheet item={addingToTrip ? exp : null} onClose={() => setAddingToTrip(false)} />
     </SafeAreaView>
   );
 }
@@ -332,7 +347,6 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingBottom: SPACING.xxl },
   ownerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
-  visitorActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
   photo: { height: PHOTO_HEIGHT, backgroundColor: COLORS.border },
   dots: {
     flexDirection: 'row', justifyContent: 'center', gap: 6,
@@ -360,6 +374,17 @@ const styles = StyleSheet.create({
   },
   rankEmoji: { fontSize: 26 },
   rankInfo: { flex: 1 },
+  logisticsStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    backgroundColor: COLORS.accentLight, borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm + 2,
+    marginTop: SPACING.xs,
+  },
+  logisticsInfo: { flex: 1 },
+  confirmChip: {
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm + 2, paddingVertical: 3,
+  },
   quote: { fontStyle: 'italic', lineHeight: 22 },
   saveCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
