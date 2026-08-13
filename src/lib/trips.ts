@@ -1,26 +1,63 @@
 import { supabase } from '@/lib/supabase';
-import { Trip, Experience, Location } from '@/types';
+import { Trip, Experience, Location, TripMember, RankedExperience } from '@/types';
 import { primaryLocation, localityLabel, experienceTitle } from '@/lib/experienceDisplay';
 import { keyAfter, keyBefore, keyBetween, initialRankKey } from '@/lib/ranking';
 import { daysBetween, formatDay } from '@/lib/dates';
 import { haptics } from '@/lib/haptics';
+import { getTripMembers } from '@/lib/tripMembers';
+import { getMyUserId } from '@/lib/auth';
+import { EXPERIENCE_WITH_RANKINGS, withMine } from '@/lib/rankings';
 
-export type TripDetail = { trip: Trip | null; items: Experience[] };
+export type TripDetail = {
+  trip: Trip | null;
+  // Itinerary stops. Each is ONE shared post carrying every participant's
+  // ranking — `mine` is the viewer's, when they've ranked it.
+  items: RankedExperience[];
+  members: TripMember[];
+  // The viewing user, so the screen can resolve permissions without a second query.
+  myUserId: string | null;
+};
 
 // A trip plus its itinerary items (planned + ranked), ordered by trip_position.
 // Rows with a null trip_position (logged before itinerary ordering existed) sort
 // last, then by creation time.
+//
+// Each stop is ONE shared post carrying every participant's ranking, so the
+// itinerary can show who's done what without any grouping layer.
 export async function getTripDetail(tripId: string): Promise<TripDetail> {
-  const [{ data: t }, { data: exps }] = await Promise.all([
-    supabase.from('trips').select('*').eq('id', tripId).maybeSingle(),
+  const [{ data: t }, { data: exps }, members, myUserId] = await Promise.all([
+    // Name the FK: `trips` now has two paths to `users` (owner FK + the
+    // many-to-many via trip_members), so a bare `users(...)` is ambiguous.
+    supabase
+      .from('trips')
+      .select('*, user:users!trips_user_id_fkey(id, name, handle, avatar_url)')
+      .eq('id', tripId)
+      .maybeSingle(),
     supabase
       .from('experiences')
-      .select('*')
+      .select(EXPERIENCE_WITH_RANKINGS)
       .eq('trip_id', tripId)
       .order('trip_position', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true }),
+    getTripMembers(tripId),
+    getMyUserId(),
   ]);
-  return { trip: (t as Trip) ?? null, items: (exps ?? []) as Experience[] };
+  return {
+    trip: (t as Trip) ?? null,
+    items: ((exps ?? []) as unknown as Experience[]).map((e) => withMine(e, myUserId)),
+    members,
+    myUserId,
+  };
+}
+
+// Can this user build the itinerary? Owner or joined member. Mirrors the
+// `is_trip_member` SQL function — RLS is the real gate, this just drives the UI.
+export function canEditTrip(
+  trip: Trip | null, members: TripMember[], userId: string | null,
+): boolean {
+  if (!trip || !userId) return false;
+  if (trip.user_id === userId) return true;
+  return members.some((m) => m.user_id === userId && m.status === 'joined');
 }
 
 // Accepts 'YYYY-MM-DD' (or empty → null). Throws on a non-empty malformed value
@@ -63,57 +100,63 @@ export async function updateTrip(
   if (error) throw error;
 }
 
-export type CitySection = { city: string; items: Experience[] };
+// --- Itinerary sections ---
+//
+// A stop used to be N experience rows (one per person, merged for display). Now
+// it's ONE shared post carrying everyone's rankings, so the itinerary is a plain
+// list again — no grouping layer.
 
-// Group itinerary items into city sections. Input is assumed already ordered by
-// trip_position, so a city's order = where its first stop falls (your "ordered by
-// which city came first" rule), and items keep their within-city order.
-export function groupByCity(items: Experience[]): CitySection[] {
+export type CitySection = { city: string; items: RankedExperience[] };
+
+// Group stops into city sections. Input is assumed already ordered, so a city's
+// order = where its first stop falls (your "ordered by which city came first"
+// rule), and stops keep their within-city order.
+export function groupByCity(stops: RankedExperience[]): CitySection[] {
   const sections: CitySection[] = [];
   const indexByCity: Record<string, number> = {};
-  for (const item of items) {
-    const city = primaryLocation(item)?.city || localityLabel(item) || 'Other';
+  for (const stop of stops) {
+    const city = primaryLocation(stop)?.city || localityLabel(stop) || 'Other';
     if (indexByCity[city] === undefined) {
       indexByCity[city] = sections.length;
       sections.push({ city, items: [] });
     }
-    sections[indexByCity[city]].items.push(item);
+    sections[indexByCity[city]].items.push(stop);
   }
   return sections;
 }
 
-export type DaySection = { key: string; label: string; items: Experience[] };
+export type DaySection = { key: string; label: string; items: RankedExperience[] };
 
-// Group itinerary items by their experience_date — "Day N · Jun 3" relative to the
-// trip's start date (dates before the start, or when there's no start, fall back to
-// the bare date label). Days ascend; within a day items keep itinerary order.
-export function groupByDay(items: Experience[], startDate: string | null): DaySection[] {
-  const byDate = [...items].sort((a, b) =>
+// Group stops by their experience_date — "Day N · Jun 3" relative to the trip's
+// start date (dates before the start, or when there's no start, fall back to the
+// bare date label). Days ascend; within a day stops keep itinerary order.
+export function groupByDay(stops: RankedExperience[], startDate: string | null): DaySection[] {
+  const byDate = [...stops].sort((a, b) =>
     a.experience_date < b.experience_date ? -1
     : a.experience_date > b.experience_date ? 1
     : posOf(a) < posOf(b) ? -1 : 1);
 
   const sections: DaySection[] = [];
   const indexByKey: Record<string, number> = {};
-  for (const item of byDate) {
-    const date = item.experience_date;
+  for (const stop of byDate) {
+    const date = stop.experience_date;
     const dayNum = startDate ? daysBetween(startDate, date) + 1 : 0;
     const label = dayNum >= 1 ? `Day ${dayNum} · ${formatDay(date)}` : formatDay(date);
     if (indexByKey[date] === undefined) {
       indexByKey[date] = sections.length;
       sections.push({ key: date, label, items: [] });
     }
-    sections[indexByKey[date]].items.push(item);
+    sections[indexByKey[date]].items.push(stop);
   }
   return sections;
 }
 
 // --- Itinerary ordering (fractional index over trip_position) ---
 
-// An item's effective itinerary position. Ranked rows logged before trip_position
-// existed fall back to their rank_key (also a valid fractional index).
+// An item's effective itinerary position. Rows from before trip_position existed
+// sort last rather than falling back to rank_key, which lives on rankings now.
 export function posOf(item: Experience): string {
-  return item.trip_position ?? item.rank_key ?? initialRankKey();
+  return item.trip_position ?? initialRankKey();
 }
 
 // A trip_position that appends to the very end of the itinerary. A new stop sorts
@@ -123,34 +166,35 @@ export function nextTripPosition(items: Experience[]): string {
   return ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
 }
 
-// trip_position to move `items[idx]` one slot earlier within its (already-ordered) list.
-export function positionToMoveUp(items: Experience[], idx: number): string | null {
+// trip_position to move `stops[idx]` one slot earlier within its (already-ordered) list.
+export function positionToMoveUp(stops: Experience[], idx: number): string | null {
   if (idx <= 0) return null;
-  const before = idx - 2 >= 0 ? posOf(items[idx - 2]) : null;
-  const after = posOf(items[idx - 1]);
+  const before = idx - 2 >= 0 ? posOf(stops[idx - 2]) : null;
+  const after = posOf(stops[idx - 1]);
   return before ? keyBetween(before, after) : keyBefore(after);
 }
 
-// trip_position to move `items[idx]` one slot later within its (already-ordered) list.
-export function positionToMoveDown(items: Experience[], idx: number): string | null {
-  if (idx >= items.length - 1) return null;
-  const before = posOf(items[idx + 1]);
-  const after = idx + 2 <= items.length - 1 ? posOf(items[idx + 2]) : null;
+// trip_position to move `stops[idx]` one slot later within its (already-ordered) list.
+export function positionToMoveDown(stops: Experience[], idx: number): string | null {
+  if (idx >= stops.length - 1) return null;
+  const before = posOf(stops[idx + 1]);
+  const after = idx + 2 <= stops.length - 1 ? posOf(stops[idx + 2]) : null;
   return after ? keyBetween(before, after) : keyAfter(before);
 }
 
 // --- Mutations ---
 
-// Add an unranked planned stop to a trip from a picked place.
+// Add an unranked planned stop to a trip from a picked place. One stop, one row —
+// everyone on the trip ranks this same post when they've done it.
 export async function addPlannedStop(args: {
   tripId: string; location: Location; note: string | null; position: string;
   // When the stop is planned for ('YYYY-MM-DD'); the UI defaults it to today.
   date: string;
 }): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
+  const userId = await getMyUserId();
+  if (!userId) throw new Error('Not signed in');
   const { error } = await supabase.from('experiences').insert({
-    user_id: user.id,
+    created_by: userId,
     status: 'planned',
     trip_id: args.tripId,
     title: args.location.name,
@@ -163,19 +207,35 @@ export async function addPlannedStop(args: {
   if (error) throw error;
 }
 
-// Remove an item from a trip. Planned stops are deleted outright; ranked
-// experiences stay in My List but are detached from the trip.
-export async function removeTripItem(item: Experience): Promise<void> {
-  if (item.status === 'planned') {
-    const { error } = await supabase.from('experiences').delete().eq('id', item.id);
+// Remove a stop from the itinerary.
+//   * Nobody has ranked it -> it's shared scratch work; any trip member deletes it.
+//   * Someone has -> it's a real experience. It leaves the itinerary but stays in
+//     the lists of everyone who ranked it, because their rankings are untouched.
+export async function removeTripStop(stop: RankedExperience): Promise<void> {
+  if (stop.rankings.length === 0) {
+    const { error } = await supabase.from('experiences').delete().eq('id', stop.id);
     if (error) throw error;
-  } else {
-    const { error } = await supabase
-      .from('experiences')
-      .update({ trip_id: null, trip_position: null })
-      .eq('id', item.id);
-    if (error) throw error;
+    return;
   }
+  const { error } = await supabase
+    .from('experiences')
+    .update({ trip_id: null, trip_position: null })
+    .eq('id', stop.id);
+  if (error) throw error;
+}
+
+// What `removeTripStop` will actually do, for the confirm dialog.
+export function removalSummary(stop: RankedExperience, myUserId: string | null): string {
+  const others = stop.rankings.filter((r) => r.user_id !== myUserId);
+  if (stop.rankings.length === 0) {
+    return 'This planned stop will be deleted for everyone on the trip.';
+  }
+  if (others.length > 0) {
+    const who = others[0].user?.name ?? 'someone';
+    const rest = others.length > 1 ? ` and ${others.length - 1} more` : '';
+    return `It leaves the itinerary but stays in your list${who ? ` — and in ${who}${rest}'s` : ''}.`;
+  }
+  return 'The experience stays in your list — it just leaves this trip.';
 }
 
 export async function setTripPosition(itemId: string, position: string): Promise<void> {
@@ -194,15 +254,15 @@ export async function copyStopToTrip(item: Experience, tripId: string): Promise<
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
   const { data: rows } = await supabase
-    .from('experiences').select('trip_position, rank_key').eq('trip_id', tripId);
+    .from('experiences').select('trip_position').eq('trip_id', tripId);
   const ps = (rows ?? [])
-    .map((r) => r.trip_position ?? r.rank_key)
+    .map((r) => r.trip_position)
     .filter((p): p is string => !!p)
     .sort();
   const position = ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
   const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
   const { error } = await supabase.from('experiences').insert({
-    user_id: user.id,
+    created_by: user.id,
     status: 'planned',
     trip_id: tripId,
     title: item.title ?? locs[0]?.name ?? 'Stop',
@@ -237,7 +297,7 @@ export async function forkTrip(source: Trip, items: Experience[]): Promise<strin
   const rows = items.map((item) => {
     const locs = item.locations?.length ? item.locations : (item.location ? [item.location] : []);
     const row = {
-      user_id: user.id,
+      created_by: user.id,
       status: 'planned',
       trip_id: t.id,
       title: experienceTitle(item),

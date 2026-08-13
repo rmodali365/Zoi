@@ -7,6 +7,13 @@ version history of every schema change in git and lets the DB be rebuilt from sc
 `schema.sql` is a **generated snapshot** of the full current schema for quick reading.
 It is NOT applied to the database — do not hand-edit it to make changes.
 
+> **Two databases now.** `Zoi` (dev) and `zoi-prod` both exist, and prod has real users.
+> The Management API method below writes the schema but records nothing, which is how
+> prod drifted three migrations behind. See **[docs/deployment.md](../docs/deployment.md)**
+> for the migration ledger, the CI workflow that replaces this, and the prod runbook.
+> Once the ledger is adopted, use `supabase db push` and stop applying by hand — a
+> hand-applied migration leaves the ledger stale.
+
 ## Making a schema change
 
 1. Create a new migration file:

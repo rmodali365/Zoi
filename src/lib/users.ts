@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase';
 import { uploadAvatar } from '@/lib/storage';
-import { User, Experience, Trip } from '@/types';
+import { getMyUserId } from '@/lib/auth';
+import { getRankedList } from '@/lib/rankings';
+import { User, RankedExperience, Trip } from '@/types';
 
 // Normalize a handle to the stored form: lowercase, only [a-z0-9_].
 export function cleanHandle(raw: string): string {
@@ -49,22 +51,25 @@ export async function updateProfile(
 
 export type UserProfileData = {
   profile: User | null;
-  experiences: Experience[];
+  experiences: RankedExperience[];
   trips: Trip[];
 };
 
 // Fetch another user's public profile: header (users is world-readable) plus their
-// experiences and trips. Experiences/trips are readable thanks to the public-profiles
+// ranked list and trips. Everything here is readable thanks to the public-profiles
 // RLS policies (see migration 20260608220000_public_profiles).
+//
+// Their list is their RANKINGS — a shared experience appears in both people's
+// lists at each of their own positions, which is the point of the split.
 export async function getUserProfile(userId: string): Promise<UserProfileData> {
-  const [{ data: prof }, { data: exps }, { data: tr }] = await Promise.all([
+  const [{ data: prof }, experiences, { data: tr }] = await Promise.all([
     supabase.from('users').select('*').eq('id', userId).maybeSingle(),
-    supabase.from('experiences').select('*').eq('user_id', userId).eq('status', 'ranked').order('rank_key', { ascending: true }),
+    getRankedList(userId, await getMyUserId()),
     supabase.from('trips').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
   ]);
   return {
     profile: (prof as User) ?? null,
-    experiences: (exps ?? []) as Experience[],
+    experiences,
     trips: (tr ?? []) as Trip[],
   };
 }

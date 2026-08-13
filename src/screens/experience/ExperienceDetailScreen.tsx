@@ -13,12 +13,14 @@ import {
 } from '@/lib/experienceDisplay';
 import { formatDay } from '@/lib/dates';
 import { getExperience, deleteExperience } from '@/lib/experiences';
+import { leaveExperience, pooledPhotos } from '@/lib/rankings';
 import { getMyProfile } from '@/lib/me';
 import { getSavedIds, getSaveCounts, saveExperience, unsaveExperience } from '@/lib/saves';
 import { qk } from '@/lib/queryKeys';
 import { TripPickerSheet } from '@/components/TripPickerSheet';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
+import { AvatarStack } from '@/components/ui/AvatarStack';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 // Registered in the Feed, Experiences and Profile stacks, so it's typed
@@ -47,7 +49,10 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   const { data: profile } = useQuery({ queryKey: qk.myProfile, queryFn: getMyProfile });
   const { data: savedIds = new Set<string>() } = useQuery({ queryKey: qk.savedIds, queryFn: getSavedIds });
 
-  const isMine = !!exp && !!profile && exp.user_id === profile.id;
+  // "Mine" now means I have a ranking on this shared post — not that I own it.
+  // Only the creator can delete the post; anyone on it can leave.
+  const isMine = !!exp?.mine;
+  const isCreator = !!exp && !!profile && exp.created_by === profile.id;
   const saved = !!exp && savedIds.has(exp.id);
 
   // Author-side feedback (#59): how many people saved this to their Want-to-do.
@@ -66,21 +71,48 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
     },
   });
 
-  // Owner delete (#53). Positions are derived from rank_key order and saves cascade
-  // in the DB, so invalidating the owner's lists is all the cleanup needed.
+  const afterRemoval = () => {
+    queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+    queryClient.invalidateQueries({ queryKey: qk.myTrips });
+    queryClient.invalidateQueries({ queryKey: qk.feed });
+    if (exp?.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(exp.trip_id) });
+    navigation.goBack();
+  };
+
+  // Creator deletes the whole post — for everyone. Rankings cascade in the DB.
   const del = useMutation({
     mutationFn: () => deleteExperience(experienceId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.myExperiences });
-      queryClient.invalidateQueries({ queryKey: qk.myTrips });
-      if (exp?.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(exp.trip_id) });
-      navigation.goBack();
-    },
+    onSuccess: afterRemoval,
     onError: (e: unknown) =>
       Alert.alert('Could not delete', e instanceof Error ? e.message : 'Try again.'),
   });
 
+  // Leaving removes only YOUR ranking. The post survives for everyone else; if
+  // you were the last one on it, a DB trigger retires it.
+  const leave = useMutation({
+    mutationFn: () => leaveExperience(experienceId),
+    onSuccess: afterRemoval,
+    onError: (e: unknown) =>
+      Alert.alert('Could not leave', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const others = exp?.rankings.filter((r) => r.user_id !== exp?.mine?.user_id) ?? [];
+
   function confirmDelete() {
+    // Deleting a shared post takes it away from everyone, so say so plainly and
+    // offer the softer option.
+    if (others.length > 0) {
+      Alert.alert(
+        'Delete for everyone?',
+        `${others.length === 1 ? 'One other person has' : `${others.length} other people have`} ranked this. Deleting removes it from their lists too — leaving only removes it from yours.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Just leave', onPress: () => leave.mutate() },
+          { text: 'Delete for everyone', style: 'destructive', onPress: () => del.mutate() },
+        ],
+      );
+      return;
+    }
     Alert.alert(
       'Delete this experience?',
       exp?.trip_id
@@ -89,6 +121,17 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => del.mutate() },
+      ],
+    );
+  }
+
+  function confirmLeave() {
+    Alert.alert(
+      'Leave this experience?',
+      'Your ranking, take and photos go. It stays for everyone else who was there.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave', style: 'destructive', onPress: () => leave.mutate() },
       ],
     );
   }
@@ -120,12 +163,16 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
     );
   }
 
-  const author = exp.user;
   const locations = exp.locations?.length ? exp.locations : (exp.location ? [exp.location] : []);
   const pin = primaryLocation(exp);
   const hasPin =
     !!pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) && !(pin.lat === 0 && pin.lng === 0);
   const ranked = exp.status === 'ranked';
+  const shared = exp.rankings.length > 1;
+  // Everyone's photos, yours first — each person's own view of the same night.
+  const photos: string[] = pooledPhotos(exp);
+  // The header credits whoever ranked it first when you haven't.
+  const lead = exp.mine ?? exp.rankings[0];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -142,11 +189,20 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             >
               <Ionicons name="create-outline" size={22} color={COLORS.text} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={confirmDelete} disabled={del.isPending} hitSlop={8} activeOpacity={0.7}>
-              {del.isPending
-                ? <ActivityIndicator size="small" color={COLORS.error} />
-                : <Ionicons name="trash-outline" size={22} color={COLORS.error} />}
-            </TouchableOpacity>
+            {isCreator ? (
+              <TouchableOpacity onPress={confirmDelete} disabled={del.isPending} hitSlop={8} activeOpacity={0.7}>
+                {del.isPending
+                  ? <ActivityIndicator size="small" color={COLORS.error} />
+                  : <Ionicons name="trash-outline" size={22} color={COLORS.error} />}
+              </TouchableOpacity>
+            ) : (
+              // Not yours to delete — but you can take yourself off it.
+              <TouchableOpacity onPress={confirmLeave} disabled={leave.isPending} hitSlop={8} activeOpacity={0.7}>
+                {leave.isPending
+                  ? <ActivityIndicator size="small" color={COLORS.error} />
+                  : <Ionicons name="exit-outline" size={22} color={COLORS.error} />}
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={styles.visitorActions}>
@@ -167,8 +223,8 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* Photo carousel */}
-        {exp.photos.length > 0 && (
+        {/* Photo carousel — everyone's, pooled */}
+        {photos.length > 0 && (
           <View>
             <ScrollView
               horizontal
@@ -176,13 +232,13 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onPhotoScroll}
             >
-              {exp.photos.map((uri) => (
+              {photos.map((uri) => (
                 <Image key={uri} source={{ uri }} style={[styles.photo, { width }]} />
               ))}
             </ScrollView>
-            {exp.photos.length > 1 && (
+            {photos.length > 1 && (
               <View style={styles.dots}>
-                {exp.photos.map((uri, i) => (
+                {photos.map((uri, i) => (
                   <View key={uri} style={[styles.dot, i === photoIndex && styles.dotActive]} />
                 ))}
               </View>
@@ -191,19 +247,29 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
         )}
 
         <View style={styles.body}>
-          {/* Author */}
+          {/* Who was there */}
           <TouchableOpacity
             style={styles.authorRow}
-            onPress={() => navigation.navigate('UserProfile', { userId: exp.user_id })}
-            disabled={isMine}
+            onPress={() => lead && navigation.navigate('UserProfile', { userId: lead.user_id })}
+            disabled={!lead || lead.user_id === profile?.id}
             activeOpacity={0.7}
           >
-            <Avatar uri={author?.avatar_url} size={40} />
+            {shared ? (
+              <AvatarStack uris={exp.rankings.map((r) => r.user?.avatar_url)} size={40} max={4} />
+            ) : (
+              <Avatar uri={lead?.user?.avatar_url} size={40} />
+            )}
             <View style={styles.authorInfo}>
               <AppText variant="body" weight="semibold" numberOfLines={1}>
-                {isMine ? 'You' : author?.name ?? 'Someone'}
+                {exp.rankings.length === 0
+                  ? 'Nobody has ranked this yet'
+                  : exp.rankings
+                      .map((r) => (r.user_id === profile?.id ? 'You' : r.user?.name ?? 'Someone'))
+                      .join(', ')}
               </AppText>
-              <AppText variant="caption" numberOfLines={1}>@{author?.handle ?? '…'}</AppText>
+              <AppText variant="caption" numberOfLines={1}>
+                {shared ? 'did this together' : `@${lead?.user?.handle ?? '…'}`}
+              </AppText>
             </View>
             <View style={styles.dateChip}>
               <Ionicons name="calendar-outline" size={13} color={COLORS.textSecondary} />
@@ -217,25 +283,42 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             <AppText variant="body" color={COLORS.textSecondary}>{localityLabel(exp)}</AppText>
           )}
 
-          {/* Rank strip */}
-          {ranked && (
-            <View style={styles.rankStrip}>
-              <AppText style={styles.rankEmoji}>{sentimentEmoji(exp.sentiment)}</AppText>
-              <View style={styles.rankInfo}>
-                <AppText variant="body" weight="semibold">{sentimentLabel(exp.sentiment)}</AppText>
-                {exp.rankPosition !== null && (
+          {/* One strip per person. Same night, different lists — that contrast is
+              the interesting part of a shared experience. Only YOUR position is
+              exact here; other people's come from their own list. */}
+          {exp.rankings.map((r) => {
+            const isYou = r.user_id === profile?.id;
+            return (
+              <View key={r.user_id} style={styles.rankStrip}>
+                <AppText style={styles.rankEmoji}>{sentimentEmoji(r.sentiment)}</AppText>
+                <View style={styles.rankInfo}>
+                  <AppText variant="body" weight="semibold">{sentimentLabel(r.sentiment)}</AppText>
                   <AppText variant="caption" color={COLORS.textSecondary}>
-                    {isMine ? 'Your' : `${author?.name ?? 'Their'}’s`} ranking
+                    {isYou ? 'Your ranking' : `${r.user?.name ?? 'Their'}’s ranking`}
+                  </AppText>
+                </View>
+                {isYou && exp.rankPosition !== null && (
+                  <AppText variant="title" color={COLORS.brand}>
+                    #{exp.rankPosition}
+                    <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}> of {exp.authorTotal}</AppText>
                   </AppText>
                 )}
               </View>
-              {exp.rankPosition !== null && (
-                <AppText variant="title" color={COLORS.brand}>
-                  #{exp.rankPosition}
-                  <AppText variant="subhead" weight="regular" color={COLORS.textSecondary}> of {exp.authorTotal}</AppText>
-                </AppText>
-              )}
-            </View>
+            );
+          })}
+
+          {/* You were added but haven't ranked it — the prompt to add your own view. */}
+          {!exp.mine && exp.rankings.length > 0 && (
+            <TouchableOpacity
+              style={styles.rankCta}
+              onPress={() => (navigation as unknown as NavigationProp<Record<string, object>>).navigate('Log', {
+                screen: 'AddExperience',
+                params: { graduateExperienceId: experienceId },
+              } as object)}
+              activeOpacity={0.85}
+            >
+              <AppText variant="body" weight="semibold" color={COLORS.surface}>Add my photos & rank it</AppText>
+            </TouchableOpacity>
           )}
 
           {/* Author-only: aggregate save count (never who) — the reward for posting. */}
@@ -248,10 +331,14 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             </View>
           )}
 
-          {/* Quick take */}
-          {!!exp.quick_take && (
-            <AppText variant="body" style={styles.quote}>“{exp.quick_take}”</AppText>
-          )}
+          {/* Everyone's take, attributed. Nobody gets a private note — a quick
+              take is the public one-liner it always was. */}
+          {exp.rankings.filter((r) => !!r.quick_take).map((r) => (
+            <AppText key={r.user_id} variant="body" style={styles.quote}>
+              {shared ? `${r.user_id === profile?.id ? 'You' : r.user?.name?.split(' ')[0] ?? ''}: ` : ''}
+              “{r.quick_take}”
+            </AppText>
+          ))}
 
           {/* Planned-stop note */}
           {!ranked && !!exp.note && (
@@ -360,6 +447,10 @@ const styles = StyleSheet.create({
   },
   rankEmoji: { fontSize: 26 },
   rankInfo: { flex: 1 },
+  rankCta: {
+    backgroundColor: COLORS.brand, borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md, alignItems: 'center', marginTop: SPACING.xs,
+  },
   quote: { fontStyle: 'italic', lineHeight: 22 },
   saveCountRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },

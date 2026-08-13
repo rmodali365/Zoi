@@ -13,6 +13,7 @@ import { haptics } from '@/lib/haptics';
 import { getMyProfile } from '@/lib/me';
 import { qk } from '@/lib/queryKeys';
 import { AppText } from '@/components/ui/AppText';
+import { FormScrollView } from '@/components/ui/FormScrollView';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -101,7 +102,7 @@ export function EditProfileScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <FormScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Avatar */}
         <View style={styles.avatarWrap}>
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8}>
@@ -152,7 +153,7 @@ export function EditProfileScreen({ navigation }: Props) {
             <AppText variant="caption" style={styles.hint}>Will be saved as @{handleClean}</AppText>
           )}
         </View>
-      </ScrollView>
+      </FormScrollView>
     </SafeAreaView>
   );
 }

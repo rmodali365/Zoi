@@ -61,6 +61,7 @@ export function SearchScreen({ navigation }: Props) {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
+        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -85,27 +86,38 @@ export function SearchScreen({ navigation }: Props) {
                 <AppText variant="caption" weight="semibold" color={COLORS.textSecondary} style={styles.sectionTitle}>
                   Ranked by people you follow
                 </AppText>
-                {experiences.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={styles.row}
-                    onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.rankBadge}>
-                      <AppText variant="subhead" weight="bold" color={COLORS.brand}>#{item.rankPosition}</AppText>
-                    </View>
-                    <View style={styles.info}>
-                      <AppText variant="body" weight="semibold" numberOfLines={1}>
-                        {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
-                      </AppText>
-                      <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1}>
-                        {[localityLabel(item), item.user ? `@${item.user.handle}` : null].filter(Boolean).join(' · ')}
-                      </AppText>
-                    </View>
-                    {item.photos.length > 0 && <Image source={{ uri: item.photos[0] }} style={styles.thumb} />}
-                  </TouchableOpacity>
-                ))}
+                {experiences.map((item) => {
+                  // A shared post can be several people's recommendation; lead
+                  // with whoever ranked it highest.
+                  const best = [...item.ranked].sort(
+                    (a, b) => (a.rankPosition ?? Infinity) - (b.rankPosition ?? Infinity),
+                  )[0];
+                  const photos = item.ranked.flatMap((r) => r.photos);
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.row}
+                      onPress={() => navigation.navigate('ExperienceDetail', { experienceId: item.id })}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.rankBadge}>
+                        <AppText variant="subhead" weight="bold" color={COLORS.brand}>#{best?.rankPosition ?? '–'}</AppText>
+                      </View>
+                      <View style={styles.info}>
+                        <AppText variant="body" weight="semibold" numberOfLines={1}>
+                          {sentimentEmoji(best?.sentiment)} {experienceTitle(item)}
+                        </AppText>
+                        <AppText variant="caption" color={COLORS.textSecondary} numberOfLines={1}>
+                          {[
+                            localityLabel(item),
+                            item.ranked.map((r) => `@${r.user?.handle ?? '…'}`).join(', ') || null,
+                          ].filter(Boolean).join(' · ')}
+                        </AppText>
+                      </View>
+                      {photos.length > 0 && <Image source={{ uri: photos[0] }} style={styles.thumb} />}
+                    </TouchableOpacity>
+                  );
+                })}
               </>
             )}
 

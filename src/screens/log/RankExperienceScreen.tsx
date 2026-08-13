@@ -4,14 +4,13 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, NavigationProp } from '@react-navigation/native';
-import { AppTabParamList, LogStackParamList, Experience, Sentiment } from '@/types';
+import { AppTabParamList, LogStackParamList, Experience, Ranking, Sentiment } from '@/types';
 import { SENTIMENTS, SENTIMENT_LABELS, SENTIMENT_EMOJI, thirdBounds } from '@/constants/experiences';
 import { initialRankKey, keyBefore, keyAfter, keyBetween } from '@/lib/ranking';
 import { experienceTitle } from '@/lib/experienceDisplay';
 import { getMyUserId } from '@/lib/auth';
-import {
-  getRankedExperiences, insertRankedExperience, graduatePlannedStop, rerankExperience,
-} from '@/lib/experiences';
+import { getRankingPool } from '@/lib/rankings';
+import { saveRankedExperience, rerankExperience } from '@/lib/experiences';
 import { queryClient } from '@/lib/queryClient';
 import { qk } from '@/lib/queryKeys';
 import { haptics } from '@/lib/haptics';
@@ -24,13 +23,18 @@ type Props = {
   route: RouteProp<LogStackParamList, 'RankExperience'>;
 };
 
+// One candidate in the head-to-head: a ranking of yours plus enough of the
+// shared experience to render the comparison card.
+type PoolEntry = Ranking & { experience: Experience | null };
+
 export function RankExperienceScreen({ navigation, route }: Props) {
   const { draft, experienceId, rerank } = route.params;
   const { show } = useBanner();
 
   const [phase, setPhase] = useState<'sentiment' | 'comparing' | 'saving'>('sentiment');
   const [sentiment, setSentiment] = useState<Sentiment | null>(null);
-  const [pool, setPool] = useState<Experience[]>([]);
+  // The comparison pool is the user's own RANKINGS — their list, in their order.
+  const [pool, setPool] = useState<PoolEntry[]>([]);
   // Binary-search window: insert position lands at `lo` once lo === hi.
   const [lo, setLo] = useState(0);
   const [hi, setHi] = useState(0);
@@ -46,11 +50,11 @@ export function RankExperienceScreen({ navigation, route }: Props) {
       return;
     }
 
-    // Load the FULL ranked list — ranking is one overall list per user now.
-    // Planned trip stops are excluded; only ranked experiences are comparison
-    // candidates. When re-ranking, the row being moved leaves the pool so it
-    // can't be compared against itself.
-    const existing = (await getRankedExperiences(userId)).filter((e) => e.id !== experienceId);
+    // Load the FULL ranked list — one overall list per user. It's your rankings,
+    // so planned stops (which have none) can't appear. When re-ranking, or when
+    // ranking an experience you've already ranked, that entry leaves the pool so
+    // it can't be compared against itself.
+    const existing = (await getRankingPool(userId)).filter((r) => r.experience_id !== experienceId);
 
     if (existing.length === 0) {
       // Very first experience — auto #1.
@@ -90,11 +94,11 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     }
   }
 
-  // `list` is the ranked pool (status='ranked'), so every rank_key is non-null.
-  function rankKeyForPositionIn(list: Experience[], pos: number): string {
-    if (pos <= 0) return keyBefore(list[0].rank_key!);
-    if (pos >= list.length) return keyAfter(list[list.length - 1].rank_key!);
-    return keyBetween(list[pos - 1].rank_key!, list[pos].rank_key!);
+  // Every entry is a ranking, so rank_key is always present.
+  function rankKeyForPositionIn(list: PoolEntry[], pos: number): string {
+    if (pos <= 0) return keyBefore(list[0].rank_key);
+    if (pos >= list.length) return keyAfter(list[list.length - 1].rank_key);
+    return keyBetween(list[pos - 1].rank_key, list[pos].rank_key);
   }
 
   async function finalize(pos: number) {
@@ -114,7 +118,11 @@ export function RankExperienceScreen({ navigation, route }: Props) {
     // Re-ranking is about the list, not the trip — always land on the ranked
     // list so the new position is visible.
     if (draft.trip_id && !rerank) {
-      tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id } });
+      // initial: false puts ExperiencesHome under TripDetail in the List stack.
+      // Without it the stack is rooted AT TripDetail, so Back has nothing to pop
+      // and falls through to the tab navigator (which defaults to the first tab —
+      // the Feed — instead of the Experiences list).
+      tabNav?.navigate('List', { screen: 'TripDetail', params: { tripId: draft.trip_id }, initial: false });
     } else {
       tabNav?.navigate('List', { screen: 'ExperiencesHome' });
     }
@@ -143,33 +151,22 @@ export function RankExperienceScreen({ navigation, route }: Props) {
         return;
       }
 
-      if (experienceId) {
-        // Graduating an existing planned stop: flip it to ranked in place (keeping
-        // trip membership + position) and persist everything captured on the way.
-        await graduatePlannedStop({
-          experienceId,
-          draft,
-          sentiment: s,
-          rankKey,
-          onPhotoError: () =>
-            Alert.alert('Photo upload failed', 'Saving your experience without the new photos.'),
-        });
-        invalidate();
-        queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
-        haptics.success();
-        show({ title: 'Ranked!', message: `${draft.title} landed at #${pos + 1} of ${total}.` });
-        finish();
-        return;
-      }
-
-      await insertRankedExperience({
-        userId,
+      // One call for both cases now. With `experienceId` you're ranking an
+      // EXISTING shared post — a planned trip stop, or an experience someone
+      // added you to — and that's just inserting your own ranking on it, with
+      // your own photos and take. Nobody else's row is touched. Without it, the
+      // post is created first and then ranked.
+      await saveRankedExperience({
         draft,
         sentiment: s,
         rankKey,
+        experienceId,
         onPhotoError: () =>
           Alert.alert('Photo upload failed', 'Saving your experience without photos.'),
+        onInviteError: () =>
+          Alert.alert('Couldn’t add everyone', 'Your experience saved — try adding the people you were with again later.'),
       });
+      if (experienceId) queryClient.invalidateQueries({ queryKey: qk.experience(experienceId) });
     } catch (e) {
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not save.');
       setPhase('comparing');
@@ -243,7 +240,9 @@ export function RankExperienceScreen({ navigation, route }: Props) {
           <AppText variant="subhead" weight="medium" color={COLORS.textMuted}>vs</AppText>
 
           <TouchableOpacity style={styles.compareCard} onPress={() => handleChoice(false)} activeOpacity={0.85}>
-            <AppText variant="headline" weight="semibold" style={styles.compareName}>{opponent ? experienceTitle(opponent) : 'Experience'}</AppText>
+            <AppText variant="headline" weight="semibold" style={styles.compareName}>
+              {opponent?.experience ? experienceTitle(opponent.experience) : 'Experience'}
+            </AppText>
             <AppText variant="footnote" style={styles.compareTag}>Ranked</AppText>
           </TouchableOpacity>
         </View>

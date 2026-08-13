@@ -1,72 +1,69 @@
 import { supabase } from '@/lib/supabase';
-import { Experience, ExperienceDraft, Sentiment } from '@/types';
+import { Experience, ExperienceDraft, RankedExperience, Ranking, Sentiment } from '@/types';
 import { keyAfter, initialRankKey } from '@/lib/ranking';
 import { uploadExperiencePhotos } from '@/lib/storage';
+import { getMyUserId } from '@/lib/auth';
+import { EXPERIENCE_WITH_RANKINGS, withMine, upsertRanking } from '@/lib/rankings';
+import { inviteToExperience } from '@/lib/experienceParticipants';
 
-// Mutations + reads behind the rank-and-log flow. Keeps RankExperienceScreen a thin
-// orchestrator (sentiment → binary compare → save) with no inline Supabase calls.
+// Reads + writes for the SHARED half of an experience. The personal half
+// (sentiment, rank position, quick take, photos) lives in lib/rankings.ts.
+//
+// A save therefore writes twice: the outing, then your ranking of it. Only the
+// second is personal, which is why ranking someone else's experience never
+// touches their row.
 
-export type ExperienceDetail = Experience & {
-  // 1-based position in the author's overall ranked list (null for planned stops)
-  // and the size of that list — the "#N of M" shown on the detail screen.
+export type ExperienceDetail = RankedExperience & {
+  // 1-based position in the VIEWER's list (null when they haven't ranked it),
+  // and the size of that list — the "#N of M" on the detail screen.
   rankPosition: number | null;
   authorTotal: number;
 };
 
-// One experience with its author + trip embedded, plus the author's rank position
-// computed server-side (count of rank_keys at or before this one). Readable for any
-// authenticated user thanks to the public-profiles RLS.
+// One experience with its creator, trip and every ranking on it.
 export async function getExperience(id: string): Promise<ExperienceDetail | null> {
+  const myUserId = await getMyUserId();
   const { data, error } = await supabase
     .from('experiences')
-    .select('*, user:users!experiences_user_id_fkey(id, name, handle, avatar_url), trip:trips(id, title)')
+    .select(EXPERIENCE_WITH_RANKINGS)
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const exp = data as Experience;
 
-  const ranked = supabase
-    .from('experiences')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', exp.user_id)
-    .eq('status', 'ranked');
-  const { count: total } = await ranked;
+  const exp = withMine(data as unknown as Experience, myUserId);
 
+  // Position is shown for the viewer's own ranking — your list, your number.
   let rankPosition: number | null = null;
-  if (exp.status === 'ranked' && exp.rank_key) {
-    const { count } = await supabase
-      .from('experiences')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', exp.user_id)
-      .eq('status', 'ranked')
-      .lte('rank_key', exp.rank_key);
-    rankPosition = count ?? null;
+  let authorTotal = 0;
+  if (myUserId) {
+    const [{ count: at }, { count: total }] = await Promise.all([
+      exp.mine
+        ? supabase
+            .from('experience_rankings')
+            .select('experience_id', { count: 'exact', head: true })
+            .eq('user_id', myUserId)
+            .lte('rank_key', exp.mine.rank_key)
+        : Promise.resolve({ count: null }),
+      supabase
+        .from('experience_rankings')
+        .select('experience_id', { count: 'exact', head: true })
+        .eq('user_id', myUserId),
+    ]);
+    rankPosition = at ?? null;
+    authorTotal = total ?? 0;
   }
-  return { ...exp, rankPosition, authorTotal: total ?? 0 };
+  return { ...exp, rankPosition, authorTotal };
 }
 
-// The ranked pool for a user — the candidates a new experience is binary-compared
-// against. One overall ranked list per user; planned trip stops are excluded.
-export async function getRankedExperiences(userId: string): Promise<Experience[]> {
-  const { data } = await supabase
-    .from('experiences')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'ranked')
-    .order('rank_key', { ascending: true });
-  return (data ?? []) as Experience[];
-}
-
-// The append-to-end trip_position for a trip's itinerary (same fractional-index
-// convention as trips.ts: nulls fall back to rank_key for pre-itinerary rows).
+// The append-to-end trip_position for a trip's itinerary.
 async function appendTripPosition(tripId: string): Promise<string> {
   const { data: rows } = await supabase
     .from('experiences')
-    .select('trip_position, rank_key')
+    .select('trip_position')
     .eq('trip_id', tripId);
   const ps = (rows ?? [])
-    .map((r) => r.trip_position ?? r.rank_key)
+    .map((r) => r.trip_position)
     .filter((p): p is string => !!p)
     .sort();
   return ps.length ? keyAfter(ps[ps.length - 1]) : initialRankKey();
@@ -86,68 +83,13 @@ async function resolvePhotos(
   }
 }
 
-// Graduate an existing planned stop: flip it to ranked in place — keeping its trip
-// membership + position — and persist everything captured on the way (title, photos,
-// quick take, tags, date), so a graduated stop is a full experience (#51).
-export async function graduatePlannedStop(args: {
-  experienceId: string;
-  draft: ExperienceDraft;
-  sentiment: Sentiment;
-  rankKey: string;
-  onPhotoError?: () => void;
-}): Promise<void> {
-  const { experienceId, draft, sentiment, rankKey, onPhotoError } = args;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
-
-  const photos = await resolvePhotos(user.id, draft.photos, onPhotoError);
-
-  const { error } = await supabase
-    .from('experiences')
-    .update({
-      status: 'ranked',
-      sentiment,
-      rank_key: rankKey,
-      title: draft.title,
-      locations: draft.locations,
-      location: draft.locations[0] ?? null,
-      tags: draft.tags,
-      photos,
-      quick_take: draft.quick_take,
-      experience_date: draft.experience_date,
-    })
-    .eq('id', experienceId);
-  if (error) throw error;
-}
-
-// Re-rank an existing ranked experience (#61): ONLY sentiment + rank_key move.
-// Content, photos, trip membership and itinerary position stay untouched — the
-// mirror image of updateExperience below, which touches everything BUT these two.
-export async function rerankExperience(args: {
-  experienceId: string;
-  sentiment: Sentiment;
-  rankKey: string;
-}): Promise<void> {
-  const { error } = await supabase
-    .from('experiences')
-    .update({ sentiment: args.sentiment, rank_key: args.rankKey })
-    .eq('id', args.experienceId);
-  if (error) throw error;
-}
-
-// Owner edit: update an experience's content (never its sentiment/rank_key — moving
-// in the list is the re-ranking flow above). Changing trips appends the row to the target
-// itinerary; leaving a trip clears the itinerary position.
-export async function updateExperience(args: {
+// Update the shared content of an experience. Anyone on it can do this — that's
+// what makes it one post rather than two copies. Never touches anyone's ranking.
+export async function updateExperienceContent(args: {
   id: string;
   draft: ExperienceDraft;
-  onPhotoError?: () => void;
 }): Promise<void> {
-  const { id, draft, onPhotoError } = args;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not signed in');
-
-  const photos = await resolvePhotos(user.id, draft.photos, onPhotoError);
+  const { id, draft } = args;
 
   const { data: row } = await supabase
     .from('experiences')
@@ -166,8 +108,6 @@ export async function updateExperience(args: {
       locations: draft.locations,
       location: draft.locations[0] ?? null,
       tags: draft.tags,
-      photos,
-      quick_take: draft.quick_take,
       experience_date: draft.experience_date,
       trip_id: draft.trip_id,
       trip_position: tripPosition,
@@ -176,42 +116,141 @@ export async function updateExperience(args: {
   if (error) throw error;
 }
 
-// Owner delete. RLS restricts to own rows; saves cascade via FK, and rank positions
-// are derived from rank_key order, so nothing else needs re-keying.
+// Owner edit from the detail screen: shared content plus the viewer's own photos
+// and quick take (their half of the post).
+export async function updateExperience(args: {
+  id: string;
+  draft: ExperienceDraft;
+  onPhotoError?: () => void;
+}): Promise<void> {
+  const { id, draft, onPhotoError } = args;
+  const userId = await getMyUserId();
+  if (!userId) throw new Error('Not signed in');
+
+  await updateExperienceContent({ id, draft });
+
+  const { data: mine } = await supabase
+    .from('experience_rankings')
+    .select('sentiment, rank_key')
+    .eq('experience_id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (mine) {
+    const photos = await resolvePhotos(userId, draft.photos, onPhotoError);
+    const { error } = await supabase
+      .from('experience_rankings')
+      .update({ photos, quick_take: draft.quick_take })
+      .eq('experience_id', id)
+      .eq('user_id', userId);
+    if (error) throw error;
+  }
+}
+
+// Delete the whole post (creator only — RLS enforces it). Everyone's rankings
+// cascade. Someone who just wants it out of THEIR list leaves instead
+// (`leaveExperience` in lib/rankings.ts).
 export async function deleteExperience(id: string): Promise<void> {
   const { error } = await supabase.from('experiences').delete().eq('id', id);
   if (error) throw error;
 }
 
-// Insert a freshly logged + ranked experience. Photos are uploaded first; if the
-// upload fails the row is still saved without them and `onPhotoError` is invoked so
-// the UI can warn. When logging into a trip, the stop is appended to its itinerary.
-export async function insertRankedExperience(args: {
-  userId: string;
+// Create the shared outing. Used by the log flow before ranking, and by trip
+// planning for a stop nobody has ranked yet.
+export async function createExperience(args: {
+  draft: ExperienceDraft;
+  status?: 'planned' | 'ranked';
+}): Promise<string> {
+  const userId = await getMyUserId();
+  if (!userId) throw new Error('Not signed in');
+  const { draft } = args;
+
+  const tripPosition = draft.trip_id ? await appendTripPosition(draft.trip_id) : null;
+
+  const { data, error } = await supabase
+    .from('experiences')
+    .insert({
+      created_by: userId,
+      status: args.status ?? 'planned',
+      trip_id: draft.trip_id,
+      trip_position: tripPosition,
+      title: draft.title,
+      locations: draft.locations,
+      // Representative location (= locations[0]) for the map pin / legacy reads.
+      location: draft.locations[0] ?? null,
+      tags: draft.tags,
+      experience_date: draft.experience_date,
+    })
+    .select('id')
+    .single();
+  if (error || !data) throw error ?? new Error('Could not save that experience.');
+  return data.id;
+}
+
+// Save a freshly logged experience: create the shared post, rank it into your
+// list, and invite anyone you were with. `experienceId` ranks an EXISTING post
+// instead — a trip stop, or an experience you were invited to — which is the
+// same call, because ranking is always just your own row.
+export async function saveRankedExperience(args: {
   draft: ExperienceDraft;
   sentiment: Sentiment;
   rankKey: string;
+  experienceId?: string;
   onPhotoError?: () => void;
-}): Promise<void> {
-  const { userId, draft, sentiment, rankKey, onPhotoError } = args;
+  onInviteError?: () => void;
+}): Promise<string> {
+  const { draft, sentiment, rankKey, onPhotoError, onInviteError } = args;
+  const userId = await getMyUserId();
+  if (!userId) throw new Error('Not signed in');
 
-  const photoUrls = await resolvePhotos(userId, draft.photos, onPhotoError);
-  const tripPosition = draft.trip_id ? await appendTripPosition(draft.trip_id) : null;
+  const photos = await resolvePhotos(userId, draft.photos, onPhotoError);
 
-  const { error } = await supabase.from('experiences').insert({
-    user_id: userId,
+  let experienceId = args.experienceId;
+  if (experienceId) {
+    // Ranking an existing post: refresh the shared details (you may have fixed
+    // the date or added a place on the way through the capture step).
+    await updateExperienceContent({ id: experienceId, draft });
+  } else {
+    experienceId = await createExperience({ draft });
+  }
+
+  // Your half. The trigger behind this joins you to the experience and flips it
+  // to 'ranked'.
+  await upsertRanking({
+    experienceId,
     sentiment,
-    trip_id: draft.trip_id,
-    trip_position: tripPosition,
-    title: draft.title,
-    locations: draft.locations,
-    // Representative location (= locations[0]) for the map pin / legacy reads.
-    location: draft.locations[0] ?? null,
-    tags: draft.tags,
-    photos: photoUrls,
-    quick_take: draft.quick_take,
-    rank_key: rankKey,
-    experience_date: draft.experience_date,
+    rankKey,
+    quickTake: draft.quick_take,
+    photos,
   });
+
+  // Inviting is best-effort: the experience is saved and ranked either way.
+  if (draft.companion_ids.length > 0) {
+    try {
+      await inviteToExperience(experienceId, draft.companion_ids);
+    } catch {
+      onInviteError?.();
+    }
+  }
+
+  return experienceId;
+}
+
+// Re-rank (#61): ONLY sentiment + rank_key move, and only yours.
+export async function rerankExperience(args: {
+  experienceId: string;
+  sentiment: Sentiment;
+  rankKey: string;
+}): Promise<void> {
+  const userId = await getMyUserId();
+  if (!userId) throw new Error('Not signed in');
+  const { error } = await supabase
+    .from('experience_rankings')
+    .update({ sentiment: args.sentiment, rank_key: args.rankKey })
+    .eq('experience_id', args.experienceId)
+    .eq('user_id', userId);
   if (error) throw error;
 }
+
+// Re-export so callers that think in "the ranked pool" keep one import site.
+export type { Ranking };

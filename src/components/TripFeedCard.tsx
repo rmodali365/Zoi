@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FeedTrip } from '@/lib/feed';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
+import { AvatarStack } from '@/components/ui/AvatarStack';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
 
 type Props = {
@@ -13,9 +14,13 @@ type Props = {
 };
 
 // Feed card for a followed user's trip — cover, itinerary summary, tap to browse
-// (and borrow from) the full itinerary.
+// (and borrow from) the full itinerary. A shared trip (#67) is credited to
+// everyone building it, not just whoever created it.
 export function TripFeedCard({ trip, onPress, onPressAuthor }: Props) {
   const author = trip.user;
+  const builders = trip.builders ?? [];
+  const shared = builders.length > 1;
+  const others = builders.length - 1;
 
   const meta: string[] = [`${trip.stopCount} ${trip.stopCount === 1 ? 'stop' : 'stops'}`];
   if (trip.cities.length > 0) {
@@ -32,10 +37,20 @@ export function TripFeedCard({ trip, onPress, onPressAuthor }: Props) {
         disabled={!onPressAuthor}
         activeOpacity={0.7}
       >
-        <Avatar uri={author?.avatar_url} size={36} />
+        {shared ? (
+          <AvatarStack uris={builders.map((b) => b.avatar_url)} size={36} max={3} />
+        ) : (
+          <Avatar uri={author?.avatar_url} size={36} />
+        )}
         <View style={styles.headInfo}>
-          <AppText variant="body" weight="semibold" numberOfLines={1}>{author?.name ?? 'Someone'}</AppText>
-          <AppText variant="caption" numberOfLines={1}>shared a trip</AppText>
+          <AppText variant="body" weight="semibold" numberOfLines={1}>
+            {shared
+              ? `${author?.name ?? 'Someone'} + ${others} ${others === 1 ? 'other' : 'others'}`
+              : author?.name ?? 'Someone'}
+          </AppText>
+          <AppText variant="caption" numberOfLines={1}>
+            {shared ? 'are planning a trip together' : 'shared a trip'}
+          </AppText>
         </View>
         <Ionicons name="airplane-outline" size={18} color={COLORS.textMuted} />
       </TouchableOpacity>

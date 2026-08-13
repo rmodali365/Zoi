@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { User, Experience, Trip } from '@/types';
+import { User, RankedExperience, Trip } from '@/types';
 import { getUserProfile } from '@/lib/users';
 import { getMyUserId } from '@/lib/auth';
 import { experienceTitle, localityLabel, sentimentEmoji } from '@/lib/experienceDisplay';
@@ -28,7 +28,7 @@ export function UserProfileScreen() {
   const { userId } = route.params;
 
   const [profile, setProfile] = useState<User | null>(null);
-  const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [experiences, setExperiences] = useState<RankedExperience[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
@@ -145,7 +145,9 @@ export function UserProfileScreen() {
               <AppText variant="body" weight="bold" color={COLORS.brand} style={styles.rank}>{i + 1}</AppText>
               <View style={styles.rowInfo}>
                 <AppText variant="body" weight="medium" numberOfLines={1}>
-                  {sentimentEmoji(item.sentiment)} {experienceTitle(item)}
+                  {/* THEIR ranking, not the viewer's — a shared post sits in
+                      both lists at each person's own position. */}
+                  {sentimentEmoji(item.rankings.find((r) => r.user_id === userId)?.sentiment)} {experienceTitle(item)}
                 </AppText>
                 {!!localityLabel(item) && (
                   <AppText variant="caption" numberOfLines={1} style={styles.rowPlace}>{localityLabel(item)}</AppText>

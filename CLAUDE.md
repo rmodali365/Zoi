@@ -56,13 +56,19 @@ src/
     auth.ts                 # getMyUserId, sendOtp, verifyOtp, signOut
     me.ts                   # current user's experiences/trips/profile (shared qk cache)
     users.ts                # profile CRUD, handle validation, avatar update
-    experiences.ts          # getRankedExperiences, insertRankedExperience, graduatePlannedStop,
-                            #   rerankExperience (sentiment + rank_key only)
+    experiences.ts          # the SHARED half: getExperience, createExperience,
+                            #   saveRankedExperience (post + your ranking + invites),
+                            #   updateExperienceContent, rerankExperience, deleteExperience
     experienceDisplay.ts    # display helpers: title/locality/sentiment label, multi-location tolerant
     trips.ts                # trip CRUD + itinerary: city grouping, trip_position ordering,
                             #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
     follows.ts              # search users, follow/unfollow, counts, lists, getSuggestedUsers
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
+    rankings.ts             # the PERSONAL half: getRankedList/getRankingPool, upsert/move,
+                            #   leaveExperience, withMine + pooledPhotos view helpers
+    experienceParticipants.ts # who's on an experience: invite/accept/decline/remove
+    tripMembers.ts          # collaborative trips: roster, invite/accept/decline, leave/remove,
+                            #   joined-trip ids (feeds getMyTrips + the feed)
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
     notifications.ts        # in-app activity: follow/save events (written by DB triggers)
@@ -135,34 +141,94 @@ existing profile row → straight into app; no profile row → `SetupProfile` (n
 → `setProfileComplete(true)`. No separate onboarding screen.
 
 ### Data model
-Two entity types (NO "buckets"):
-- **Experience** = the atomic, rankable unit. Has a **lifecycle**: `status = 'planned' |
-  'ranked'`. Ranked rows have a `sentiment` + `rank_key`; planned rows have neither (they're
-  trip stops not yet done — just place(s) + optional `note`). Locations are **multi**:
-  `locations` jsonb array is canonical, `location` (= locations[0]) is a denormalized
-  single kept for the map pin / legacy rows. Also: optional `trip_id`, `title`, tags[],
-  photos[], quick_take, `experience_date` (required 'YYYY-MM-DD' — when it happened /
-  is planned for; defaults to today via `ui/DateField`), and `trip_position` (per-trip
-  itinerary order, independent of rank_key — both are fractional indexes from
-  `src/lib/ranking.ts`).
+An outing is split in two, and that split is the most important thing in the schema
+(migration `20260813000000_shared_experiences`):
+
+- **Experience** = the **shared** half: what happened, held **once** no matter how many
+  people were there. `created_by` (who first logged it — NOT an owner), `status =
+  'planned' | 'ranked'`, `title`, `tags`, `experience_date`, optional `trip_id` +
+  `trip_position`, and `note` on planned stops. Locations are **multi**: `locations`
+  jsonb array is canonical, `location` (= locations[0]) is a denormalized single kept
+  for the map pin / legacy rows.
+- **Ranking** (`experience_rankings`, PK `(experience_id, user_id)`) = the **personal**
+  half: `sentiment`, `rank_key`, `quick_take`, `photos`. One row per person.
+- **Participant** (`experience_participants`) = who's on it. Ranking auto-joins you.
 - **Trip** = an itinerary container grouping experiences via `experiences.trip_id`. NOT
   ranked itself. Has title/destination/dates/cover_photo. TripDetail renders city-grouped
   sections ordered by `trip_position` (`groupByCity` in `lib/trips.ts`), with an optional
   day-grouped view (`groupByDay` over `experience_date`) when the trip has a start date.
+  Trips can be **collaborative** — see below.
 
-**Planned → ranked ("graduation"):** a planned stop becomes a real ranked experience via
-the normal rank flow with `experienceId` set — `graduatePlannedStop` flips the same row in
-place, keeping trip membership/position/photos/note. Planned stops are filtered out of ALL
-ranked surfaces (feed, ranked lists, comparison pools) via `status = 'ranked'`.
+**Why split:** ranking cannot be shared. The same night is #3 in your list and #12 in
+theirs, Loved by you and Fine by them. Everything that can be common lives on the
+experience; everything that's a personal judgement lives on the ranking. A shared night
+is therefore ONE post in one place — not a copy each — which is what makes it behave
+consistently in the feed, your list, search and the wishlist.
+
+`RankedExperience` (in `types/`) is the shape every list surface renders: the post, all
+its `rankings`, and `mine` pulled out when the viewer has one. Build it with `withMine()`
+from `lib/rankings.ts`; `pooledPhotos()` merges everyone's photos, viewer's first.
+
+**"My ranked list" is now literally my rankings** — `experience_rankings where user_id =
+me order by rank_key`, with the post embedded (`getRankedList`). Planned stops have no
+ranking, so they can't leak into ranked surfaces; the old `status = 'ranked'` filter is
+structural now.
+
+**Ranking something = inserting your own ranking row.** There is no "graduation" flipping
+a row any more, and no claiming/copying: ranking a planned trip stop, ranking an
+experience someone added you to, and logging something new are all `saveRankedExperience`
+— the only difference is whether the post already exists. Ranking is opt-in per person:
+skipping a stop is normal, so nothing lands in your list that you didn't do.
+
+**Leaving vs deleting.** Leaving (`leaveExperience`) deletes only YOUR ranking; the post
+survives for everyone else. DB triggers then clean up: the last ranking leaving a
+standalone post deletes it, and leaving a trip stop reverts it to `planned`. Only
+`created_by` can delete the post outright, which removes it for everyone — the detail
+screen says so and offers "just leave" instead.
+
+### Collaborative trips (#67)
+A trip can have members: `trip_members (trip_id, user_id, status, invited_by)`. The
+**owner is `trips.user_id` and never has a member row**, which is why there's no role
+column — there's nothing to escalate to. Only `status = 'joined'` grants write access.
+
+A stop is one shared post, so the itinerary is a plain ordered list — no grouping layer.
+Capabilities (RLS, verified by behavioural tests — see the migrations):
+- Any joined member: add stops, reorder any stop, edit trip details, invite others.
+- Any joined member: **delete any planned stop**, including a trip mate's — planning is
+  shared scratch work. Removing a stop that people HAVE ranked detaches it from the
+  itinerary for everyone, but stays in each of their lists (their rankings are untouched).
+- `getMyTrips` unions owned + joined trips; the feed surfaces a shared trip to the
+  followers of every member, credited to all of them (`FeedTrip.builders`).
+
+### Collaborative experiences (#67)
+On any log, **"Who were you with?"** invites friends onto the post. An invitation never
+writes into their list — accepting only marks them joined; they still go through the
+capture step and rank it themselves, with **their own photos and quick take**. A pending
+invite is private to the two people involved (RLS): being named in someone's night before
+you agree to it isn't public.
+
+Two security-definer helpers gate this (same recursion reason as `is_trip_member`):
+- `can_rank_experience` — creator, participant (invited or joined), or trip member.
+- `can_edit_experience` — the SHARED content: creator or joined participant, plus trip
+  members **only while the stop is still `planned`**. Once someone has ranked it, only
+  the people who were there can change it.
+
+**The feed reads posts, not copies** (`getFeed`): the experiences anyone you follow has
+ranked, with all their rankings attached. One card per outing, carrying everyone's photos
+in one strip and each person's own ranking side by side — "Rushil: 😍 Loved · #3 of 41 /
+Alex: 🙂 Liked · #12 of 30". That contrast is the point: same night, different lists. The
+card resurfaces at the newest ranking, so it reappears when a friend adds theirs.
 
 ### Ranking & rating (the differentiator)
 There is ONE overall ranked list per user. When logging: pick a **sentiment** — Loved /
 Liked / Fine — which only seeds the **starting third** of the list (loved=top, liked=middle,
 fine=lower; `thirdBounds`). Then a **binary comparison** ("which did you enjoy more?")
 refines the exact position within that third, using fractional indexing (`src/lib/ranking.ts`).
-`rank_key` orders the whole list (scoped per `user_id`). **We surface rankings (positions)
-only — no numerical score for now.** A `scoreFromOverallRank` helper exists for when scores
-are reintroduced, but nothing displays it. Sentiment is kept as metadata (emoji in lists).
+`experience_rankings.rank_key` orders the whole list (scoped per `user_id`). The
+comparison pool is `getRankingPool(userId)` — your own rankings, in your order. **We
+surface rankings (positions) only — no numerical score for now.** A `scoreFromOverallRank`
+helper exists for when scores are reintroduced, but nothing displays it. Sentiment is kept
+as metadata (emoji in lists).
 
 ### Social layer (the inspiration loop)
 Profiles are **public to any authenticated user** (RLS: experiences/trips/profiles readable
@@ -189,16 +255,18 @@ Experiences and Profile stacks.
 - **Start a trip:** `StartTrip` creates a trip container (title/destination/dates/cover),
   optionally jump to add an experience.
 `AddExperienceScreen` is a **three-mode form** (`ExperienceForm`): `create` (above),
-`graduate` (Rank on a planned stop opens it prefilled — add photos/take/tags/confirm the
-date, then rank; the save updates the row in place), and `edit` (registered as
-`EditExperience` modal in the Feed/Experiences/Profile stacks — owner content edits via
+`graduate` (Rank on an existing post — a planned trip stop, or one you were added to —
+opens prefilled: the SHARED fields from the post, the personal ones from *your* ranking,
+which is empty until you rank it. That blank take/photo area is deliberate: it's where
+your view of the night goes), and `edit` (registered as `EditExperience` modal in the
+Feed/Experiences/Profile stacks — shared content + your own photos/take via
 `updateExperience`; sentiment/rank_key are never editable here). Re-rank machinery exists —
 `RankExperience` with `rerank: true` excludes the row from its own comparison pool and
 updates ONLY sentiment + rank_key via `rerankExperience` — but it deliberately has NO
 user-facing entry point: on-demand re-ranking was cut as a product decision, and the
-planned periodic check-in flow ("does it still hold up?") will be its only driver. Owners
-can also **delete** from ExperienceDetail (`deleteExperience`; saves cascade, positions
-self-heal since they derive from rank_key order).
+planned periodic check-in flow ("does it still hold up?") will be its only driver. From
+ExperienceDetail you can **leave** (drops your ranking only) or, if you created it,
+**delete** for everyone; saves cascade and positions self-heal from rank_key order.
 Finishing any rank flow **resets the Log stack to LogHome** and jumps to where the result
 is visible (the trip's itinerary if the log belongs to a trip — re-ranks always go to the
 ranked list — else the Experiences ranked list) — plain `popToTop()` breaks when the flow
@@ -255,9 +323,17 @@ change — it's a generated snapshot. To change the schema:
 4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
 
 ### PostgREST embed gotcha
-`experiences` ↔ `users` has TWO relationships (author FK + many-to-many via `saves`), so an
-embed must name the FK explicitly: `user:users!experiences_user_id_fkey(...)`. A bare
-`users(...)` errors with PGRST201 (ambiguous). `trips` embed is unambiguous.
+Nearly every path from a table to `users` is now ambiguous, so **always name the FK**. A
+bare `users(...)` errors with PGRST201:
+- `experiences` → `creator:users!experiences_created_by_fkey(...)` (created_by FK, plus
+  many-to-manys through rankings, participants and saves).
+- `trips` → `user:users!trips_user_id_fkey(...)` (owner FK + members m2m).
+- `trip_members` / `experience_participants` → both reach users via `user_id` **and**
+  `invited_by`.
+- `experience_rankings` → `user:users!experience_rankings_user_id_fkey(...)`.
+
+`EXPERIENCE_WITH_RANKINGS` in `lib/rankings.ts` is the canonical select for a shared post
+(creator + trip + every ranking with its author) — reuse it rather than rewriting embeds.
 
 ## Edge Functions
 

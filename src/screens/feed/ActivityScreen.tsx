@@ -1,15 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { NavigationProp } from '@react-navigation/native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FeedStackParamList } from '@/types';
 import { getNotifications, markAllRead, Notification } from '@/lib/notifications';
+import { acceptTripInvite, declineTripInvite, getMyTripInvites } from '@/lib/tripMembers';
+import {
+  acceptExperienceInvite, declineExperienceInvite, getMyExperienceInvites,
+} from '@/lib/experienceParticipants';
 import { experienceTitle } from '@/lib/experienceDisplay';
 import { timeAgo } from '@/lib/dates';
 import { qk } from '@/lib/queryKeys';
+import { useBanner } from '@/contexts/BannerContext';
 import { AppText } from '@/components/ui/AppText';
 import { Avatar } from '@/components/ui/Avatar';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
@@ -23,10 +29,77 @@ type Props = {
 // the unread badge on the Feed bell.
 export function ActivityScreen({ navigation }: Props) {
   const queryClient = useQueryClient();
+  const { show } = useBanner();
 
   const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: qk.notifications,
     queryFn: getNotifications,
+  });
+
+  // Which trip invites are still open — a trip_invite notification sticks around
+  // after you answer it, so the Accept/Decline buttons key off this instead.
+  const { data: invites = [] } = useQuery({
+    queryKey: qk.tripInvites,
+    queryFn: getMyTripInvites,
+  });
+  const openInvites = new Set(invites.map((i) => i.trip_id));
+
+  function afterInviteAnswer(tripId: string) {
+    queryClient.invalidateQueries({ queryKey: qk.tripInvites });
+    queryClient.invalidateQueries({ queryKey: qk.myTrips });
+    queryClient.invalidateQueries({ queryKey: qk.trip(tripId) });
+  }
+
+  const accept = useMutation({
+    mutationFn: (tripId: string) => acceptTripInvite(tripId),
+    onSuccess: (_d, tripId) => {
+      afterInviteAnswer(tripId);
+      show({ title: 'You’re on the trip', message: 'Add stops to the itinerary any time.', icon: 'airplane' });
+    },
+    onError: (e: unknown) => Alert.alert('Could not join', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const decline = useMutation({
+    mutationFn: (tripId: string) => declineTripInvite(tripId),
+    onSuccess: (_d, tripId) => afterInviteAnswer(tripId),
+    onError: (e: unknown) => Alert.alert('Could not decline', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  // "You were there too" invites (#67). Same shape as trip invites: the
+  // notification row persists, so the buttons key off the still-pending invites.
+  const { data: expInvites = [] } = useQuery({
+    queryKey: qk.experienceInvites,
+    queryFn: getMyExperienceInvites,
+  });
+  const inviteByExperience = new Map(expInvites.map((i) => [i.experience_id, i]));
+
+  function afterExperienceAnswer() {
+    queryClient.invalidateQueries({ queryKey: qk.experienceInvites });
+    queryClient.invalidateQueries({ queryKey: qk.myExperiences });
+    queryClient.invalidateQueries({ queryKey: qk.feed });
+  }
+
+  // Accepting only joins you to the post — it deliberately doesn't rank anything.
+  // You go through the capture step and add your own photos and take first, then
+  // rank it into your own list.
+  const acceptExperience = useMutation({
+    mutationFn: (experienceId: string) => acceptExperienceInvite(experienceId),
+    onSuccess: (_d, experienceId) => {
+      afterExperienceAnswer();
+      // Hop to the Log tab's capture step — same cross-tab jump TripDetail makes
+      // for "Rank", so the cast to a generic navigator matches that precedent.
+      (navigation as unknown as NavigationProp<Record<string, object>>).navigate('Log', {
+        screen: 'AddExperience',
+        params: { graduateExperienceId: experienceId },
+      } as object);
+    },
+    onError: (e: unknown) => Alert.alert('Could not add', e instanceof Error ? e.message : 'Try again.'),
+  });
+
+  const declineExperience = useMutation({
+    mutationFn: (experienceId: string) => declineExperienceInvite(experienceId),
+    onSuccess: afterExperienceAnswer,
+    onError: (e: unknown) => Alert.alert('Could not decline', e instanceof Error ? e.message : 'Try again.'),
   });
 
   // Spinner shows only during an explicit pull — not on the background refetch that
@@ -52,6 +125,14 @@ export function ActivityScreen({ navigation }: Props) {
   function open(n: Notification) {
     if (n.type === 'save' && n.experience_id) {
       navigation.navigate('ExperienceDetail', { experienceId: n.experience_id });
+    } else if ((n.type === 'trip_invite' || n.type === 'trip_join') && n.trip_id) {
+      // A pending invite has no itinerary access yet, so send them to the
+      // inviter's profile rather than a trip they can't act on.
+      if (n.type === 'trip_invite' && openInvites.has(n.trip_id)) {
+        navigation.navigate('UserProfile', { userId: n.actor_id });
+      } else {
+        navigation.navigate('TripDetail', { tripId: n.trip_id });
+      }
     } else {
       navigation.navigate('UserProfile', { userId: n.actor_id });
     }
@@ -59,6 +140,16 @@ export function ActivityScreen({ navigation }: Props) {
 
   function line(n: Notification): string {
     if (n.type === 'follow') return 'started following you';
+    if (n.type === 'trip_invite') {
+      return `added you to ${n.trip ? `“${n.trip.title}”` : 'a trip'}`;
+    }
+    if (n.type === 'trip_join') {
+      return `joined ${n.trip ? `“${n.trip.title}”` : 'your trip'}`;
+    }
+    if (n.type === 'experience_tag') {
+      const what = n.experience ? `“${experienceTitle(n.experience)}”` : 'something';
+      return `says you were there for ${what}`;
+    }
     const what = n.experience ? `“${experienceTitle(n.experience)}”` : 'one of your experiences';
     return `wants to do ${what}`;
   }
@@ -87,26 +178,74 @@ export function ActivityScreen({ navigation }: Props) {
             <View style={styles.empty}>
               <AppText variant="headline" style={styles.emptyTitle}>Nothing yet</AppText>
               <AppText variant="body" color={COLORS.textSecondary} style={styles.emptyBody}>
-                When someone follows you or saves one of your experiences, it shows up here.
+                When someone follows you, saves one of your experiences, or adds you to a trip, it shows up here.
               </AppText>
             </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.row, !item.read && styles.rowUnread]}
-              onPress={() => open(item)}
-              activeOpacity={0.7}
-            >
-              <Avatar uri={item.actor?.avatar_url} size={40} />
-              <View style={styles.rowBody}>
-                <AppText variant="body">
-                  <AppText variant="body" weight="semibold">{item.actor?.name ?? 'Someone'}</AppText>
-                  {` ${line(item)}`}
-                </AppText>
-              </View>
-              <AppText variant="caption" color={COLORS.textMuted}>{timeAgo(item.created_at)}</AppText>
-            </TouchableOpacity>
-          )}
+          renderItem={({ item }) => {
+            const pendingInvite =
+              item.type === 'trip_invite' && !!item.trip_id && openInvites.has(item.trip_id);
+            const pendingTag =
+              item.type === 'experience_tag' && item.experience_id
+                ? inviteByExperience.get(item.experience_id)
+                : undefined;
+            return (
+              <TouchableOpacity
+                style={[styles.row, !item.read && styles.rowUnread]}
+                onPress={() => open(item)}
+                activeOpacity={0.7}
+              >
+                <Avatar uri={item.actor?.avatar_url} size={40} />
+                <View style={styles.rowBody}>
+                  <AppText variant="body">
+                    <AppText variant="body" weight="semibold">{item.actor?.name ?? 'Someone'}</AppText>
+                    {` ${line(item)}`}
+                  </AppText>
+                  {pendingInvite && (
+                    <View style={styles.inviteActions}>
+                      <TouchableOpacity
+                        style={styles.acceptBtn}
+                        onPress={() => accept.mutate(item.trip_id as string)}
+                        disabled={accept.isPending}
+                        activeOpacity={0.85}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.surface}>Join trip</AppText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => decline.mutate(item.trip_id as string)}
+                        disabled={decline.isPending}
+                        hitSlop={8}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.textSecondary}>Decline</AppText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {!!pendingTag && (
+                    <View style={styles.inviteActions}>
+                      <TouchableOpacity
+                        style={styles.acceptBtn}
+                        onPress={() => acceptExperience.mutate(pendingTag.experience_id)}
+                        disabled={acceptExperience.isPending}
+                        activeOpacity={0.85}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.surface}>
+                          Add my photos & rank
+                        </AppText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => declineExperience.mutate(pendingTag.experience_id)}
+                        disabled={declineExperience.isPending}
+                        hitSlop={8}
+                      >
+                        <AppText variant="caption" weight="semibold" color={COLORS.textSecondary}>No thanks</AppText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+                <AppText variant="caption" color={COLORS.textMuted}>{timeAgo(item.created_at)}</AppText>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -129,6 +268,11 @@ const styles = StyleSheet.create({
   },
   rowUnread: { backgroundColor: COLORS.brandLight },
   rowBody: { flex: 1 },
+  inviteActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.xs },
+  acceptBtn: {
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.full, backgroundColor: COLORS.brand,
+  },
   empty: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: SPACING.xl, gap: SPACING.sm,
