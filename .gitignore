@@ -16,3 +16,9 @@ web-build/
 .env.production
 .env.*.local
 .claude/settings.local.json
+
+# Database dumps taken before a production migration. These contain real user
+# data (phone numbers, every experience and trip) — never commit one.
+prod-backup-*.sql
+*-backup-*.sql
+supabase/.temp/
