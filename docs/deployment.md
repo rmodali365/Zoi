@@ -21,9 +21,31 @@ Both live in the same org (`bwlexuautjzmwanwfohv`). The anon keys for each are i
 talks to prod whether or not prod's schema is ready for it. Check the schema before
 building, not after.
 
-## Current state (2026-08-13) — prod is behind
+## Status: prod migrated 2026-08-13 ✅
 
-`zoi-prod` has **real data**: 9 users, 26 experiences, 3 trips, 16 follows, 3 saves.
+`zoi-prod` is now current through `20260814120000`, with the migration ledger adopted, so
+future promotions are `supabase db push` and nothing else. What the cutover produced:
+
+- 27 experiences → 27 shared posts + **24 rankings** (the 3 planned stops correctly get
+  none). No groups existed on prod, so nothing collapsed. Zero orphans.
+- All four Edge Functions redeployed (`places` was two versions behind).
+- Push secrets set — a **different** `PUSH_SECRET` from dev, so a leak in one doesn't
+  reach the other.
+- `push_config` and `save_counts` confirmed closed to anon.
+- Pre-migration snapshot: `prod-backup-20260813.sql.json` (gitignored, local only) plus
+  the `experiences_backup_20260813` table in the database.
+
+**Two gotchas worth remembering for next time**, both hit during this run:
+- `supabase db dump` shells out to **Docker**, which isn't installed here, and the project
+  has no managed backups (free plan, PITR off). The fallback was a Management API export —
+  see `scratchpad/backup_prod.py` in the session, or just re-derive it: it's a `select *`
+  per table dumped to JSON.
+- `supabase link` needs `supabase login` first; the access token in
+  `.claude/settings.local.json` alone gives `LegacyPlatformAuthRequiredError`.
+
+### Historical: how prod fell behind
+
+Before the cutover, `zoi-prod` had: 9 users, 26 experiences, 3 trips, 16 follows, 3 saves.
 
 Its schema is at `20260802000000_notifications_and_save_counts`. Three migrations are
 unapplied:
@@ -32,7 +54,7 @@ unapplied:
 - `20260812120000_experience_tags`
 - `20260813000000_shared_experiences`
 
-Until those land, **a production build is broken** — every screen reads
+Those five migrations are now applied; the section above records the result.
 `experience_rankings`, which doesn't exist there yet.
 
 Prod's `places` Edge Function is version 1; dev's is version 3. Same drift, same cause.
