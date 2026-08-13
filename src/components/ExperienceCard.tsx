@@ -47,10 +47,20 @@ function nameList(names: string[]): string {
 // same night, different lists.
 export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, onToggleSave }: Props) {
   const place = localityLabel(item);
-  const ranked = item.ranked;
+  const shared = item.ranked.length > 1;
+
+  // You can be on a card in your own feed — a shared night where you follow one
+  // of the others. Say "You", and lead with yourself; seeing your own name
+  // listed like a stranger's is jarring.
+  const meId = item.mine?.user_id;
+  const ranked = meId
+    ? [...item.ranked].sort((a, b) => Number(b.user_id === meId) - Number(a.user_id === meId))
+    : item.ranked;
+  const nameOf = (r: (typeof ranked)[number]) =>
+    (r.user_id === meId ? 'You' : r.user?.name ?? 'Someone');
+  const firstNameOf = (r: (typeof ranked)[number]) =>
+    (r.user_id === meId ? 'You' : r.user?.name?.split(' ')[0] ?? 'They');
   const lead = ranked[0];
-  const rest = ranked.slice(1);
-  const shared = ranked.length > 1;
 
   // Everyone's photos: each person shot their own view of the same night.
   const photos = ranked.flatMap((r) => r.photos);
@@ -73,7 +83,7 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
         )}
         <View style={styles.headInfo}>
           <AppText variant="body" weight="semibold" numberOfLines={1}>
-            {nameList(ranked.map((r) => r.user?.name ?? 'Someone'))}
+            {nameList(ranked.map(nameOf))}
           </AppText>
           <AppText variant="caption" numberOfLines={1}>
             {shared ? 'did this together' : `@${lead?.user?.handle ?? '…'}`}
@@ -112,7 +122,7 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
           <View key={r.user_id} style={styles.rankRow}>
             {shared && (
               <AppText variant="subhead" weight="semibold" color={COLORS.textSecondary}>
-                {r.user?.name?.split(' ')[0] ?? 'They'}:{' '}
+                {firstNameOf(r)}:{' '}
               </AppText>
             )}
             <AppText variant="subhead" color={COLORS.text}>
@@ -128,7 +138,7 @@ export function ExperienceCard({ item, onPress, onPressAuthor, saved = false, on
 
         {ranked.filter((r) => !!r.quick_take).map((r) => (
           <AppText key={r.user_id} variant="body" style={styles.quote}>
-            {shared ? `${r.user?.name?.split(' ')[0] ?? ''}: ` : ''}“{r.quick_take}”
+            {shared ? `${firstNameOf(r)}: ` : ''}“{r.quick_take}”
           </AppText>
         ))}
 
