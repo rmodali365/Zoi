@@ -37,11 +37,18 @@ future promotions are `supabase db push` and nothing else. What the cutover prod
 
 **Two gotchas worth remembering for next time**, both hit during this run:
 - `supabase db dump` shells out to **Docker**, which isn't installed here, and the project
-  has no managed backups (free plan, PITR off). The fallback was a Management API export —
-  see `scratchpad/backup_prod.py` in the session, or just re-derive it: it's a `select *`
-  per table dumped to JSON.
+  has no managed backups (free plan, PITR off). Use `scripts/backup-supabase.py` instead —
+  a Management API export of every user-data table to JSON.
 - `supabase link` needs `supabase login` first; the access token in
   `.claude/settings.local.json` alone gives `LegacyPlatformAuthRequiredError`.
+
+### Tooling
+
+| | |
+|---|---|
+| `scripts/backup-supabase.py <dev\|prod>` | Pre-migration snapshot (the Docker-free backup) |
+| `scripts/verify-schema.py <dev\|prod>` | Post-migration checks: structure, PostgREST shapes, anon lockdown. Non-zero exit on failure |
+| `.claude/skills/promote-db/` | The procedure as a skill, so a session with no context can run a promotion safely |
 
 ### Historical: how prod fell behind
 
