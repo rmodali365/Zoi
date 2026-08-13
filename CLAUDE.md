@@ -72,6 +72,8 @@ src/
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
     notifications.ts        # in-app activity: follow/save events (written by DB triggers)
+    push.ts                 # push notifications: permission + Expo token registration,
+                            #   badge count, tap -> deep link (no-ops off a real device)
     contacts.ts             # contacts -> Zoi users: hash phones on device, match server-side
     share.ts                # shareProfile() — share sheet w/ https link (link Edge Function)
     places.ts               # client wrapper for the `places` Edge Function
@@ -129,6 +131,8 @@ supabase/
   functions/
     places/index.ts         # Deno Edge Function: Google Places proxy (key server-side)
     match-contacts/index.ts # phone-hash contact matching (service role, hashes only in transit)
+    push/index.ts           # (verify_jwt=false, shared-secret) sends one notifications row
+                            #   to the recipient's devices via the Expo Push API
     link/index.ts           # public (verify_jwt=false) share-link landing page: opens the
                             #   app via zoi:// or shows a get-the-app fallback
 ```
@@ -322,6 +326,26 @@ change — it's a generated snapshot. To change the schema:
 3. **Verify** it applied (query `information_schema.columns`).
 4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
 
+### SECURITY DEFINER functions are PUBLIC by default
+
+Every function is created with an EXECUTE grant to `PUBLIC`, and **`revoke ... from anon`
+does not remove it** — anon inherits through PUBLIC, so revoking a role that only ever had
+access via PUBLIC changes nothing. Anything in the `public` schema is also an RPC endpoint
+(`POST /rest/v1/rpc/<name>`), reachable with the anon key that ships in the app bundle.
+
+This shipped a real hole: `push_config()` returns the push shared secret and was readable
+by anon. Fixed in `20260814120000_lock_down_definer_functions`. The pattern to use:
+
+```sql
+revoke execute on function public.fn(args) from public, anon;
+grant  execute on function public.fn(args) to authenticated;  -- only if RLS needs it
+```
+
+Keep the `authenticated` grant for anything called inside an RLS policy — policies are
+evaluated as the invoking role — and drop it entirely for anything returning a credential.
+Check with `select proacl from pg_proc where proname = '…'`; a leading `=X/` entry means
+PUBLIC still has it.
+
 ### PostgREST embed gotcha
 Nearly every path from a table to `users` is now ambiguous, so **always name the FK**. A
 bare `users(...)` errors with PGRST201:
@@ -352,6 +376,45 @@ SUPABASE_ACCESS_TOKEN=<token> supabase functions deploy <name> --project-ref ckf
 Supabase session — `supabase.functions.invoke('places', { body })` passes it automatically.
 The Google key is the `GOOGLE_PLACES_API_KEY` function secret, NOT a client env var.
 Functions are excluded from the app's `tsconfig` (they're Deno, not RN).
+
+### Push notifications (#74)
+
+Push mirrors the in-app activity feed rather than duplicating it: **one** trigger
+(`notifications_push`) on `notifications` insert calls the `push` function via pg_net, so
+every type is covered — including ones added later. Delivery is fire-and-forget; a failed
+push must never roll back the write that caused it.
+
+`push` is called by the database, not the app, so `verify_jwt = false` and it authenticates
+on the `x-push-secret` header. It's handed only a row id and re-reads everything with the
+service role, so the copy and the recipient can't be forged. Tokens live in `device_tokens`
+(owner-only RLS — unlike the rest of the app's data these are never world-readable), and
+Expo's `DeviceNotRegistered` receipts prune dead ones.
+
+**Per-environment setup, not in migrations** (endpoint differs, secret is a credential):
+
+```sh
+supabase secrets set PUSH_SECRET=<random> --project-ref <ref>     # for the function
+```
+```sql
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/push', 'push_endpoint');
+select vault.create_secret('<same random>', 'push_secret');        -- for the trigger
+```
+
+`push_config()` returns nulls until both Vault secrets exist, and the trigger no-ops on
+null — so a fresh database or restored backup simply has push disabled rather than
+erroring on every notification.
+
+**Verified end-to-end on a physical device (2026-08-13)** — a real trip invite produced a
+lock-screen notification. Note what testing it requires: a dev/preview build (remote push
+doesn't work in Expo Go, and the Simulator can't even issue a token) plus APNs credentials
+in EAS. The `preview` EAS profile points at the **dev** project, which is where the push
+secrets live; `production` points at `zoi-prod`, which has none of this yet, so push there
+silently does nothing until the migration and secrets are promoted.
+
+Debugging without a device still works: `select content from net._http_response order by id
+desc` shows what the Edge Function returned. `{"skipped":"no devices"}` means the chain is
+fine and nothing is registered; `{"sent":N,"pruned":M}` means Expo accepted N and M tokens
+were dead and dropped.
 
 ## Project config & secrets
 

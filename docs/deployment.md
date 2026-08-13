@@ -210,6 +210,45 @@ shows up at runtime, and after this refactor **every path from a table to `users
 ambiguous** and must name its FK. The dev-side script that exercises all eleven query
 shapes is worth keeping around; point it at the prod URL + anon key.
 
+## Per-environment secrets (not carried by migrations)
+
+Migrations move schema, not credentials. These have to be set once per project, and a
+promotion that forgets them fails silently rather than loudly:
+
+| Secret | Where | Notes |
+|---|---|---|
+| `GOOGLE_PLACES_API_KEY` | function secret | `places` |
+| `PUSH_SECRET` | function secret | `push`; must match the Vault value below |
+| `push_endpoint` | Vault | `https://<ref>.supabase.co/functions/v1/push` — differs per env |
+| `push_secret` | Vault | same random string as `PUSH_SECRET` |
+
+Push is designed to fail closed: `push_config()` returns nulls until both Vault secrets
+exist and the trigger no-ops, so an unconfigured environment has push disabled rather
+than erroring on every notification. Convenient, but it means **a missing secret looks
+exactly like "nobody has notifications on"** — check `push_config()` after promoting.
+
+### Rotating the push secret
+
+`PUSH_SECRET` (function secret) and the `push_secret` Vault entry must match. To rotate:
+
+```sh
+supabase secrets set PUSH_SECRET=<new> --project-ref <ref>
+```
+```sql
+select vault.update_secret((select id from vault.secrets where name = 'push_secret'), '<new>');
+```
+
+Order doesn't matter much — a mismatch only means pushes 401 until both sides are updated,
+which is a pause rather than an outage.
+
+## Known: prod has a minor definer-function exposure
+
+`save_counts()` on `zoi-prod` is executable by PUBLIC, so anyone with the anon key can read
+aggregate save counts for experience ids they already know. No secret and no "who saved" —
+low severity, but real. It's fixed by `20260814120000_lock_down_definer_functions`, which
+sorts after the push migration and so lands in the same promotion. Nothing to do
+separately; just don't leave the promotion half-done.
+
 ## Also needed before real users (#70)
 
 - **SMS**: prod still uses Supabase test OTPs. Outside users need Twilio.

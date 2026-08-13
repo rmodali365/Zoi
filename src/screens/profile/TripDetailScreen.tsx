@@ -150,6 +150,18 @@ export function TripDetailScreen({ navigation, route }: Props) {
     trip?.user?.avatar_url,
     ...joinedMembers.map((m) => m.user?.avatar_url),
   ];
+  // Who's actually on the trip — the owner plus joined members. Used as the
+  // denominator for per-stop progress, which is why it's ids and not a count:
+  // people can be added to a single stop without joining the trip.
+  const tripMemberIds = useMemo(
+    () => new Set([
+      ...(trip?.user_id ? [trip.user_id] : []),
+      ...members.filter((m) => m.status === 'joined').map((m) => m.user_id),
+    ]),
+    // Derived from `members` rather than the already-filtered `joinedMembers`,
+    // which is a fresh array every render and would defeat the memo.
+    [trip?.user_id, members],
+  );
   const plannedStops = stops.filter((s) => s.rankings.length === 0).length;
   const dates = trip ? formatDates(trip.start_date, trip.end_date) : '';
 
@@ -491,7 +503,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     saved={savedIds.has(stop.id)}
                     onToggleSave={() => toggleSave.mutate({ id: stop.id, saved: savedIds.has(stop.id) })}
                     onAddToTrip={() => setPickerItem(stop)}
-                    memberCount={joinedMembers.length + 1}
+                    memberIds={tripMemberIds}
                   />
                 ))}
               </View>
@@ -647,12 +659,18 @@ type RowProps = {
   onOpen: () => void;
 };
 
-// "2 of 4 on the trip ranked it" — who has actually done this stop. Only
-// meaningful once more than one person could have.
-function rankedLine(stop: RankedExperience, memberCount: number): string | null {
-  if (stop.rankings.length === 0) return null;
-  if (memberCount <= 1) return null;
-  return `${stop.rankings.length} of ${memberCount} ranked it`;
+// "2 of 4 on the trip ranked it" — progress across the TRIP, so the denominator
+// is trip members and the numerator counts only their rankings.
+//
+// Someone can be added to a single stop WITHOUT joining the trip: they rank it,
+// and their ranking lands on the same shared post. Counting them here produced
+// "3 of 2 ranked it". They're not lost — they're named beside the avatars on the
+// row above; they just aren't part of a trip-progress fraction.
+function rankedLine(stop: RankedExperience, memberIds: Set<string>): string | null {
+  if (memberIds.size <= 1) return null; // solo trip: nothing to make progress against
+  const byMembers = stop.rankings.filter((r) => memberIds.has(r.user_id)).length;
+  if (byMembers === 0) return null;
+  return `${byMembers} of ${memberIds.size} on the trip ranked it`;
 }
 
 // One itinerary stop — ONE shared post, showing YOUR ranking when you have one.
@@ -660,12 +678,12 @@ function rankedLine(stop: RankedExperience, memberCount: number): string | null 
 // the same post); non-members get "save to Want-to-do" + "add to my trip".
 function ItineraryRow({
   stop, isShared, editing, canUp, canDown, onMoveUp, onMoveDown, onDelete,
-  canEdit, onRank, saved, onToggleSave, onAddToTrip, onOpen, memberCount,
-}: RowProps & { memberCount: number }) {
+  canEdit, onRank, saved, onToggleSave, onAddToTrip, onOpen, memberIds,
+}: RowProps & { memberIds: Set<string> }) {
   // "Planned" for YOU: you haven't ranked this, whatever your trip mates did.
   const planned = !stop.mine;
   const place = localityLabel(stop);
-  const ranked = rankedLine(stop, memberCount);
+  const ranked = rankedLine(stop, memberIds);
   // Everyone else who's ranked it — the shared half of the line.
   const others = stop.rankings.filter((r) => r.user_id !== stop.mine?.user_id);
 

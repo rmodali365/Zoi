@@ -65,17 +65,6 @@ export async function getFeed(): Promise<FeedEntry[]> {
   const experienceIds = [...new Set(rankingRows.map((r) => r.experience_id))];
   if (experienceIds.length === 0 && sharedTripIds.length === 0) return [];
 
-  // Positions within each followed user's own list, by walking their rank_keys.
-  const byUser: Record<string, typeof rankingRows> = {};
-  for (const r of rankingRows) (byUser[r.user_id] ??= []).push(r);
-  const positions: Record<string, { position: number; total: number }> = {};
-  for (const [userId, rows] of Object.entries(byUser)) {
-    const ordered = [...rows].sort((a, b) => (a.rank_key < b.rank_key ? -1 : 1));
-    ordered.forEach((r, i) => {
-      positions[`${r.experience_id}:${userId}`] = { position: i + 1, total: ordered.length };
-    });
-  }
-
   const [expRes, tripRes] = await Promise.all([
     experienceIds.length > 0
       ? supabase.from('experiences').select(EXPERIENCE_WITH_RANKINGS).in('id', experienceIds)
@@ -100,8 +89,36 @@ export async function getFeed(): Promise<FeedEntry[]> {
   if (tripRes.error) throw tripRes.error;
 
   const entries: FeedEntry[] = [];
+  const experiences = (expRes.data ?? []) as unknown as Experience[];
 
-  for (const row of (expRes.data ?? []) as unknown as Experience[]) {
+  // A card shows EVERY ranking on the post, which includes people you don't
+  // follow (a shared night you were both on) and yourself. Positions have to
+  // cover all of them or the same card shows "#3 of 41" for one person and a
+  // bare sentiment for the next, which reads as broken. So resolve positions
+  // from whoever actually appears, not from who you follow.
+  const rankerIds = [
+    ...new Set(experiences.flatMap((e) => (e.rankings ?? []).map((r) => r.user_id))),
+  ];
+  const positions: Record<string, { position: number; total: number }> = {};
+  if (rankerIds.length > 0) {
+    // Each person's WHOLE list — a position is only meaningful against it.
+    const { data: allRankings } = await supabase
+      .from('experience_rankings')
+      .select('experience_id, user_id, rank_key')
+      .in('user_id', rankerIds);
+    const byUser: Record<string, { experience_id: string; rank_key: string }[]> = {};
+    for (const r of (allRankings ?? []) as { experience_id: string; user_id: string; rank_key: string }[]) {
+      (byUser[r.user_id] ??= []).push(r);
+    }
+    for (const [userId, rows] of Object.entries(byUser)) {
+      const ordered = [...rows].sort((a, b) => (a.rank_key < b.rank_key ? -1 : 1));
+      ordered.forEach((r, i) => {
+        positions[`${r.experience_id}:${userId}`] = { position: i + 1, total: ordered.length };
+      });
+    }
+  }
+
+  for (const row of experiences) {
     const exp = withMine(row, myUserId);
     if (exp.rankings.length === 0) continue;
 

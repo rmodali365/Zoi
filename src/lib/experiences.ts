@@ -18,6 +18,11 @@ export type ExperienceDetail = RankedExperience & {
   // and the size of that list — the "#N of M" on the detail screen.
   rankPosition: number | null;
   authorTotal: number;
+  // Whether the viewer is actually allowed to add their own ranking. Asked of
+  // the server rather than guessed, because the rule spans three cases (creator,
+  // participant, trip member) and getting it wrong means offering a button that
+  // fails at the END of the rank flow, after all the work.
+  canRank: boolean;
 };
 
 // One experience with its creator, trip and every ranking on it.
@@ -53,7 +58,19 @@ export async function getExperience(id: string): Promise<ExperienceDetail | null
     rankPosition = at ?? null;
     authorTotal = total ?? 0;
   }
-  return { ...exp, rankPosition, authorTotal };
+
+  // Same predicate the RLS insert policy uses, so the button can't disagree
+  // with what the database will allow.
+  let canRank = false;
+  if (myUserId) {
+    const { data: allowed } = await supabase.rpc('can_rank_experience', {
+      exp_id: id,
+      uid: myUserId,
+    });
+    canRank = allowed === true;
+  }
+
+  return { ...exp, rankPosition, authorTotal, canRank };
 }
 
 // The append-to-end trip_position for a trip's itinerary.

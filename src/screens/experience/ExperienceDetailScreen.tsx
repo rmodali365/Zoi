@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, Alert,
   ActivityIndicator, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
-import { NavigationProp, RouteProp } from '@react-navigation/native';
+import { NavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { TAG_LABELS } from '@/constants/experiences';
 import {
@@ -42,10 +42,16 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
   // Visitor "add to my trip" — copies this experience as a planned stop (#58).
   const [addingToTrip, setAddingToTrip] = useState(false);
 
-  const { data: exp, isLoading } = useQuery({
+  const { data: exp, isLoading, refetch } = useQuery({
     queryKey: qk.experience(experienceId),
     queryFn: () => getExperience(experienceId),
   });
+
+  // A shared post changes underneath you — a trip mate ranks it, someone edits
+  // the place, you rank it from the trip screen. The global config is
+  // staleTime: Infinity / refetchOnMount: false, so without this the screen
+  // shows whatever it saw first. Same refetch-on-focus TripDetail uses.
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
   const { data: profile } = useQuery({ queryKey: qk.myProfile, queryFn: getMyProfile });
   const { data: savedIds = new Set<string>() } = useQuery({ queryKey: qk.savedIds, queryFn: getSavedIds });
 
@@ -75,7 +81,13 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
     queryClient.invalidateQueries({ queryKey: qk.myExperiences });
     queryClient.invalidateQueries({ queryKey: qk.myTrips });
     queryClient.invalidateQueries({ queryKey: qk.feed });
+    queryClient.invalidateQueries({ queryKey: qk.saves });
     if (exp?.trip_id) queryClient.invalidateQueries({ queryKey: qk.trip(exp.trip_id) });
+    // REMOVE, not invalidate. goBack() unmounts this screen, so its query goes
+    // inactive — and with staleTime: Infinity + refetchOnMount: false, an
+    // inactive-but-stale entry is still served as-is when the screen remounts.
+    // That's how a left experience came back showing your own ranking.
+    queryClient.removeQueries({ queryKey: qk.experience(experienceId) });
     navigation.goBack();
   };
 
@@ -307,8 +319,10 @@ export function ExperienceDetailScreen({ navigation, route }: Props) {
             );
           })}
 
-          {/* You were added but haven't ranked it — the prompt to add your own view. */}
-          {!exp.mine && exp.rankings.length > 0 && (
+          {/* You're on this but haven't ranked it — the prompt to add your own
+              view. Gated on canRank so it never appears to someone the database
+              would reject (e.g. after they've left). */}
+          {!exp.mine && exp.canRank && exp.rankings.length > 0 && (
             <TouchableOpacity
               style={styles.rankCta}
               onPress={() => (navigation as unknown as NavigationProp<Record<string, object>>).navigate('Log', {
