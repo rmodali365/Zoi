@@ -326,6 +326,26 @@ change — it's a generated snapshot. To change the schema:
 3. **Verify** it applied (query `information_schema.columns`).
 4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
 
+### SECURITY DEFINER functions are PUBLIC by default
+
+Every function is created with an EXECUTE grant to `PUBLIC`, and **`revoke ... from anon`
+does not remove it** — anon inherits through PUBLIC, so revoking a role that only ever had
+access via PUBLIC changes nothing. Anything in the `public` schema is also an RPC endpoint
+(`POST /rest/v1/rpc/<name>`), reachable with the anon key that ships in the app bundle.
+
+This shipped a real hole: `push_config()` returns the push shared secret and was readable
+by anon. Fixed in `20260814120000_lock_down_definer_functions`. The pattern to use:
+
+```sql
+revoke execute on function public.fn(args) from public, anon;
+grant  execute on function public.fn(args) to authenticated;  -- only if RLS needs it
+```
+
+Keep the `authenticated` grant for anything called inside an RLS policy — policies are
+evaluated as the invoking role — and drop it entirely for anything returning a credential.
+Check with `select proacl from pg_proc where proname = '…'`; a leading `=X/` entry means
+PUBLIC still has it.
+
 ### PostgREST embed gotcha
 Nearly every path from a table to `users` is now ambiguous, so **always name the FK**. A
 bare `users(...)` errors with PGRST201:
