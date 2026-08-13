@@ -45,19 +45,11 @@ future promotions are `supabase db push` and nothing else. What the cutover prod
 
 ### Historical: how prod fell behind
 
-Before the cutover, `zoi-prod` had: 9 users, 26 experiences, 3 trips, 16 follows, 3 saves.
-
-Its schema is at `20260802000000_notifications_and_save_counts`. Three migrations are
-unapplied:
-
-- `20260812000000_collaborative_trips`
-- `20260812120000_experience_tags`
-- `20260813000000_shared_experiences`
-
-Those five migrations are now applied; the section above records the result.
-`experience_rankings`, which doesn't exist there yet.
-
-Prod's `places` Edge Function is version 1; dev's is version 3. Same drift, same cause.
+Before the cutover, `zoi-prod` sat at `20260802000000_notifications_and_save_counts` with
+9 users, 26 experiences, 3 trips, 16 follows and 3 saves — five migrations behind, while
+`eas.json`'s production profile already pointed at it. A production build made in that
+window would have been broken on arrival. Its `places` function was two versions behind
+dev for the same reason.
 
 ## Why it drifted
 
@@ -71,48 +63,46 @@ Everything below depends on fixing that first. Once the ledger exists, **stop ap
 migrations through the Management API** — a hand-applied migration leaves the ledger
 stale, and the next `db push` will try to apply it again.
 
-## Part 1 — Adopt the migration ledger (one-time, per project)
+## Part 1 — The migration ledger (done for prod; still owed on dev)
 
-Upgrade the CLI first (was 2.33.7 locally, current is 2.114.x).
+Prod's ledger was backfilled on 2026-08-13. **Dev has not been done** — it still has no
+`supabase_migrations` schema, so `db push` against dev would try to replay everything from
+the baseline. Do this before ever pushing to dev:
 
 ```sh
-supabase link --project-ref bpwkbfffbplxyzxpkwva   # needs the DB password from the dashboard
-# Tell the ledger which migrations prod ALREADY has, without re-running them:
-supabase migration repair --status applied \
-  20260608000000 20260608193000 20260608201000 20260608210000 20260608220000 \
-  20260609000000 20260609010000 20260702000000 20260802000000
-supabase migration list                            # confirm: 9 applied, 3 pending
+supabase login                                     # the access token alone isn't enough
+supabase link --project-ref ckfpzzddogzdbjtxmahq
+supabase migration repair --status applied <every timestamp in supabase/migrations/>
+supabase migration list                            # expect: all applied, 0 pending
 ```
 
-Do the same on dev (`ckfpzzddogzdbjtxmahq`), marking **all twelve** as applied — dev
-already has them.
+Dev also carries `kind` / `details` / `city_key` from the unmerged `feat/trip-stop-kinds`
+branch, so its schema doesn't match any merged migration. Resolve that branch before
+repairing dev, or the ledger will encode a state main can't rebuild.
 
-## Part 2 — The pending promotion
+## Part 2 — Promoting (the routine, now that the ledger exists)
 
-1. **Back up.** The `20260813` migration self-creates an `experiences_backup_20260813`
-   table, but that's one table. Take the whole thing:
+1. **Back up.** `supabase db dump` needs **Docker**, which isn't installed, and there are
+   no managed backups on the free plan. Use a Management API export instead: `select *`
+   per table (`auth.users`, `users`, `follows`, `trips`, `experiences`,
+   `experience_rankings`, `experience_participants`, `saves`, `notifications`,
+   `trip_members`, `device_tokens`) dumped to JSON. Keep it out of git — `.gitignore`
+   matches `prod-backup*` and `*-backup-2*`.
+2. **Apply.** `supabase db push`. It applies pending migrations in filename order, which
+   is why timestamps must sort correctly — `20260813` reads `experience_tags` and
+   `experiences.group_id` before dropping them, so it depends on the two before it.
+3. **Verify** (see below) — structural checks *and* the PostgREST query shapes.
+4. **Deploy Edge Functions.** They don't ride along with migrations:
    ```sh
-   supabase db dump --db-url "<prod connection string>" -f prod-backup-$(date +%Y%m%d).sql
+   supabase functions deploy push places match-contacts link --project-ref <ref>
    ```
-2. **Apply, in order.** `supabase db push` handles this. The order matters:
-   `20260813` reads `experience_tags` and `experiences.group_id` before dropping them, so
-   it needs the two migrations before it — even though it deletes most of their work.
-3. **Verify** (see below).
-4. **Deploy Edge Functions** and confirm secrets:
-   ```sh
-   SUPABASE_ACCESS_TOKEN=<token> supabase functions deploy places --project-ref bpwkbfffbplxyzxpkwva
-   SUPABASE_ACCESS_TOKEN=<token> supabase secrets set GOOGLE_PLACES_API_KEY=<key> --project-ref bpwkbfffbplxyzxpkwva
-   ```
-5. **Then** build the app.
-
-Prod's data was checked against the `20260813` backfill and is clean: 0 ranked
-experiences missing `sentiment`/`rank_key`, 0 orphans, 0 trip stops missing a position.
-No prod row has a `group_id`, so the group-collapse step is a no-op there — it only moves
-rankings into the new table.
+5. **Set any new secrets** (see the table below). Push fails closed, so a missing one is
+   silent.
+6. **Then** build the app.
 
 ## Part 3 — Ongoing CI/CD
 
-`.github/workflows/db.yml` (repo is `rmodali365/Atlas`):
+`.github/workflows/db.yml` (repo is `rmodali365/Zoi` — the `Atlas` remote URL redirects):
 
 ```yaml
 name: Database
