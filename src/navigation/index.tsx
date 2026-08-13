@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { NavigationContainer, LinkingOptions } from '@react-navigation/native';
+import {
+  NavigationContainer, LinkingOptions, createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { Session } from '@supabase/supabase-js';
@@ -7,10 +9,39 @@ import { supabase } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
 import { RootStackParamList } from '@/types';
 import { AuthContext } from '@/contexts/AuthContext';
+import { registerForPush, onPushTapped, PushTarget } from '@/lib/push';
+import { qk } from '@/lib/queryKeys';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Needed to navigate from outside a screen — a push can be tapped while the app
+// is backgrounded or not running at all.
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// Route a tapped push to the screen it refers to. Every target lives in the Feed
+// stack, which is where the existing deep links land too.
+function openPushTarget(target: PushTarget) {
+  if (!navigationRef.isReady() || !target.screen) return;
+
+  const params =
+    target.screen === 'TripDetail' && target.tripId ? { tripId: target.tripId }
+    : target.screen === 'ExperienceDetail' && target.experienceId ? { experienceId: target.experienceId }
+    : target.screen === 'UserProfile' && target.userId ? { userId: target.userId }
+    : null;
+  if (!params) return;
+
+  // Opening it means it's been seen — clear the bell before the screen loads.
+  queryClient.invalidateQueries({ queryKey: qk.notificationsUnread });
+
+  // Three levels of nesting (root -> tab -> stack) defeats the generic typing;
+  // same cast the cross-tab jumps in TripDetail/Activity use.
+  (navigationRef.navigate as unknown as (name: string, params: object) => void)('App', {
+    screen: 'Feed',
+    params: { screen: target.screen, params },
+  });
+}
 
 // Deep links: zoi://user/<id> (exp://… in dev) and the Universal Link
 // https://zoisocial.com/user/<id> both open that user's profile inside the Feed tab.
@@ -69,11 +100,21 @@ export function RootNavigator() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Register this device once the user is fully signed in — a token is useless
+  // before there's an account to attach it to. Declining the permission is a
+  // valid outcome, so failures here stay silent.
+  const signedIn = !!session && profileComplete;
+  useEffect(() => {
+    if (!signedIn) return;
+    registerForPush().catch(() => {});
+    return onPushTapped(openPushTarget);
+  }, [signedIn]);
+
   if (loading) return null;
 
   return (
     <AuthContext.Provider value={{ setProfileComplete }}>
-      <NavigationContainer linking={linking}>
+      <NavigationContainer ref={navigationRef} linking={linking}>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {session && profileComplete ? (
             <Stack.Screen name="App" component={AppNavigator} />

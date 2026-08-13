@@ -72,6 +72,8 @@ src/
     saves.ts                # Wishlist (want-to-do): save/unsave, getSavedIds, saved list w/ authors,
                             #   getSaveCounts (aggregate-only, via save_counts definer fn)
     notifications.ts        # in-app activity: follow/save events (written by DB triggers)
+    push.ts                 # push notifications: permission + Expo token registration,
+                            #   badge count, tap -> deep link (no-ops off a real device)
     contacts.ts             # contacts -> Zoi users: hash phones on device, match server-side
     share.ts                # shareProfile() — share sheet w/ https link (link Edge Function)
     places.ts               # client wrapper for the `places` Edge Function
@@ -129,6 +131,8 @@ supabase/
   functions/
     places/index.ts         # Deno Edge Function: Google Places proxy (key server-side)
     match-contacts/index.ts # phone-hash contact matching (service role, hashes only in transit)
+    push/index.ts           # (verify_jwt=false, shared-secret) sends one notifications row
+                            #   to the recipient's devices via the Expo Push API
     link/index.ts           # public (verify_jwt=false) share-link landing page: opens the
                             #   app via zoi:// or shows a get-the-app fallback
 ```
@@ -352,6 +356,38 @@ SUPABASE_ACCESS_TOKEN=<token> supabase functions deploy <name> --project-ref ckf
 Supabase session — `supabase.functions.invoke('places', { body })` passes it automatically.
 The Google key is the `GOOGLE_PLACES_API_KEY` function secret, NOT a client env var.
 Functions are excluded from the app's `tsconfig` (they're Deno, not RN).
+
+### Push notifications (#74)
+
+Push mirrors the in-app activity feed rather than duplicating it: **one** trigger
+(`notifications_push`) on `notifications` insert calls the `push` function via pg_net, so
+every type is covered — including ones added later. Delivery is fire-and-forget; a failed
+push must never roll back the write that caused it.
+
+`push` is called by the database, not the app, so `verify_jwt = false` and it authenticates
+on the `x-push-secret` header. It's handed only a row id and re-reads everything with the
+service role, so the copy and the recipient can't be forged. Tokens live in `device_tokens`
+(owner-only RLS — unlike the rest of the app's data these are never world-readable), and
+Expo's `DeviceNotRegistered` receipts prune dead ones.
+
+**Per-environment setup, not in migrations** (endpoint differs, secret is a credential):
+
+```sh
+supabase secrets set PUSH_SECRET=<random> --project-ref <ref>     # for the function
+```
+```sql
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/push', 'push_endpoint');
+select vault.create_secret('<same random>', 'push_secret');        -- for the trigger
+```
+
+`push_config()` returns nulls until both Vault secrets exist, and the trigger no-ops on
+null — so a fresh database or restored backup simply has push disabled rather than
+erroring on every notification.
+
+**Can't be tested from here:** remote push needs a dev/production build (not Expo Go) on a
+**physical device**, plus APNs credentials in EAS. Everything up to the Expo API is
+verifiable — a notification insert returning `{"skipped":"no devices"}` from pg_net proves
+the whole chain bar the last hop.
 
 ## Project config & secrets
 

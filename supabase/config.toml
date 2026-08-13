@@ -5,6 +5,10 @@ verify_jwt = true
 
 [functions.match-contacts]
 verify_jwt = true
+# Called by the notifications_push DB trigger via pg_net, not by the app — there
+# is no user JWT. Authenticated instead by the x-push-secret shared secret.
+[functions.push]
+verify_jwt = false
 # Public share-link landing page — recipients aren't signed in.
 [functions.link]
 verify_jwt = false

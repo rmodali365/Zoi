@@ -210,6 +210,23 @@ shows up at runtime, and after this refactor **every path from a table to `users
 ambiguous** and must name its FK. The dev-side script that exercises all eleven query
 shapes is worth keeping around; point it at the prod URL + anon key.
 
+## Per-environment secrets (not carried by migrations)
+
+Migrations move schema, not credentials. These have to be set once per project, and a
+promotion that forgets them fails silently rather than loudly:
+
+| Secret | Where | Notes |
+|---|---|---|
+| `GOOGLE_PLACES_API_KEY` | function secret | `places` |
+| `PUSH_SECRET` | function secret | `push`; must match the Vault value below |
+| `push_endpoint` | Vault | `https://<ref>.supabase.co/functions/v1/push` — differs per env |
+| `push_secret` | Vault | same random string as `PUSH_SECRET` |
+
+Push is designed to fail closed: `push_config()` returns nulls until both Vault secrets
+exist and the trigger no-ops, so an unconfigured environment has push disabled rather
+than erroring on every notification. Convenient, but it means **a missing secret looks
+exactly like "nobody has notifications on"** — check `push_config()` after promoting.
+
 ## Also needed before real users (#70)
 
 - **SMS**: prod still uses Supabase test OTPs. Outside users need Twilio.

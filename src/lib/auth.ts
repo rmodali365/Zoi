@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { unregisterPush } from '@/lib/push';
 
 // Auth + current-user helpers. Screens go through these instead of touching
 // `supabase.auth` / the `users` table directly, so the data layer stays in lib/.
@@ -27,5 +28,9 @@ export async function verifyOtp(phone: string, token: string): Promise<{ hasProf
 }
 
 export async function signOut(): Promise<void> {
+  // Drop this device's push token FIRST — deleting it is owner-only under RLS,
+  // so after signOut() there's no auth.uid() left to authorise it and the row
+  // would linger, pushing this account's notifications to whoever signs in next.
+  await unregisterPush();
   await supabase.auth.signOut();
 }
