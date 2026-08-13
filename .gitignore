@@ -19,6 +19,8 @@ web-build/
 
 # Database dumps taken before a production migration. These contain real user
 # data (phone numbers, every experience and trip) — never commit one.
-prod-backup-*.sql
-*-backup-*.sql
+# Extension-agnostic on purpose: the first one written was .sql.json, which an
+# extension-anchored pattern silently failed to match.
+prod-backup*
+*-backup-2*
 supabase/.temp/
