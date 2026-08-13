@@ -404,10 +404,17 @@ select vault.create_secret('<same random>', 'push_secret');        -- for the tr
 null — so a fresh database or restored backup simply has push disabled rather than
 erroring on every notification.
 
-**Can't be tested from here:** remote push needs a dev/production build (not Expo Go) on a
-**physical device**, plus APNs credentials in EAS. Everything up to the Expo API is
-verifiable — a notification insert returning `{"skipped":"no devices"}` from pg_net proves
-the whole chain bar the last hop.
+**Verified end-to-end on a physical device (2026-08-13)** — a real trip invite produced a
+lock-screen notification. Note what testing it requires: a dev/preview build (remote push
+doesn't work in Expo Go, and the Simulator can't even issue a token) plus APNs credentials
+in EAS. The `preview` EAS profile points at the **dev** project, which is where the push
+secrets live; `production` points at `zoi-prod`, which has none of this yet, so push there
+silently does nothing until the migration and secrets are promoted.
+
+Debugging without a device still works: `select content from net._http_response order by id
+desc` shows what the Edge Function returned. `{"skipped":"no devices"}` means the chain is
+fine and nothing is registered; `{"sent":N,"pruned":M}` means Expo accepted N and M tokens
+were dead and dropped.
 
 ## Project config & secrets
 
