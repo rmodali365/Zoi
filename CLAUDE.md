@@ -60,8 +60,11 @@ src/
                             #   saveRankedExperience (post + your ranking + invites),
                             #   updateExperienceContent, rerankExperience, deleteExperience
     experienceDisplay.ts    # display helpers: title/locality/sentiment label, multi-location tolerant
-    trips.ts                # trip CRUD + itinerary: city grouping, trip_position ordering,
-                            #   planned stops, remove/detach, copyStopToTrip (the "inspiration" mechanic)
+    trips.ts                # trip CRUD + itinerary: city grouping (by city_key), trip_position
+                            #   ordering, addStopFromPlace (any planned stop, incl. Wishlist), setStopCity
+    cities.ts               # city resolution: cityKey (slug|region|country), haversineKm,
+                            #   sectionCentroid, resolveTripCity (snap a stop to a trip's sections)
+    stops.ts                # stop `kind` helpers: label/icon/isRankable, kindFromPlaceTypes, stopSubtitle
     follows.ts              # search users, follow/unfollow, counts, lists, getSuggestedUsers
     feed.ts                 # getFeed() — followed users' ranked experiences + author rank position
     rankings.ts             # the PERSONAL half: getRankedList/getRankingPool, upsert/move,
@@ -91,8 +94,7 @@ src/
     UserRow.tsx             # user row w/ follow button (FindPeople, FollowList)
     SuggestedUsers.tsx      # horizontal user cards w/ Follow ("Suggested for you")
     LocationSearch.tsx      # debounced Places autocomplete + select
-    TripPickerSheet.tsx     # "Add to which trip?" sheet -> copyStopToTrip (TripDetail,
-                            #   ExperienceDetail, Wishlist)
+    TripPickerSheet.tsx     # "Add to which trip?" sheet -> addStopFromPlace (Wishlist "+")
     README.md               # design-system usage guide
   constants/
     theme.ts                # COLORS / SPACING / RADIUS / FONT design tokens
@@ -121,7 +123,8 @@ src/
     profile/UserProfileScreen.tsx # someone else's profile (follow, browse trips/experiences)
     profile/FollowListScreen.tsx  # followers / following list
     profile/EditProfileScreen.tsx # edit name/@handle/avatar (modal)
-    profile/TripDetailScreen.tsx  # trip itinerary: city sections, map, owner edit / visitor copy
+    profile/TripDetailScreen.tsx  # trip itinerary: city sections, map, owner add-stop (kind
+                            #   picker + per-kind fields) / reorder / move-to-section
     search/SearchScreen.tsx # place search over followed users' rankings + trips (Feed stack)
 supabase/
   migrations/               # SOURCE OF TRUTH for the DB (see DB section)
@@ -153,15 +156,27 @@ An outing is split in two, and that split is the most important thing in the sch
   'planned' | 'ranked'`, `title`, `tags`, `experience_date`, optional `trip_id` +
   `trip_position`, and `note` on planned stops. Locations are **multi**: `locations`
   jsonb array is canonical, `location` (= locations[0]) is a denormalized single kept
-  for the map pin / legacy rows.
+  for the map pin / legacy rows. Also carries a **`kind`**: `experience | stay | eat |
+  transport | other` — what the stop *is*, orthogonal to `status` (#72). `status` is the
+  lifecycle; `kind` lets a trip hold logistics (a `stay`/`transport` is never ranked
+  content — enforced by the `experiences_kind_rankable` DB check; `eat`/`other` may be
+  ranked but aren't required to). `kind`-specific extras live in a `details` jsonb
+  (check-in/out, reservation time, confirmation…; typed as `StopDetails`). `city_key` is
+  the resolved section a stop groups under (see Trip).
 - **Ranking** (`experience_rankings`, PK `(experience_id, user_id)`) = the **personal**
   half: `sentiment`, `rank_key`, `quick_take`, `photos`. One row per person.
 - **Participant** (`experience_participants`) = who's on it. Ranking auto-joins you.
 - **Trip** = an itinerary container grouping experiences via `experiences.trip_id`. NOT
-  ranked itself. Has title/destination/dates/cover_photo. TripDetail renders city-grouped
-  sections ordered by `trip_position` (`groupByCity` in `lib/trips.ts`), with an optional
-  day-grouped view (`groupByDay` over `experience_date`) when the trip has a start date.
-  Trips can be **collaborative** — see below.
+  ranked itself. Has title/destination/`destination_location` (a picked-place anchor)/
+  dates/cover_photo. TripDetail renders **city-grouped** sections ordered by
+  `trip_position` (`groupByCity` in `lib/trips.ts`), with an optional day-grouped view
+  (`groupByDay` over `experience_date`) when the trip has a start date. City grouping keys
+  off the stored `city_key`, not raw locality strings: when a stop is added,
+  `resolveTripCity` (`lib/cities.ts`) snaps it onto an existing section by exact key or
+  ~25 km proximity to the section's centroid (or the trip destination), so a Brooklyn hotel
+  lands under the existing "New York" heading instead of forking a near-duplicate. A stop's
+  section is user-correctable ("Move to section" → `setStopCity`). Placement uses Google
+  Place data only, never the stop's title. Trips can be **collaborative** — see below.
 
 **Why split:** ranking cannot be shared. The same night is #3 in your list and #12 in
 theirs, Loved by you and Fine by them. Everything that can be common lives on the
@@ -238,11 +253,11 @@ as metadata (emoji in lists).
 Profiles are **public to any authenticated user** (RLS: experiences/trips/profiles readable
 by all signed-in users; follows still gate the *feed*, not visibility). This exists so
 trips work as inspiration: a friend going to the same place browses your profile/trip and
-- **copies a stop** into their own trip as a fresh planned stop (`copyStopToTrip` — place +
-  note only, your ranking/take stays yours), or
-- **follows a whole trip** (`forkTrip` — clones every stop as `planned` into a new trip
-  they own; rankings/takes/photos stay behind), or
-- **saves an experience** to their Wishlist (`saves` table → Wishlist subtab), or
+- **saves an experience** to their Wishlist (`saves` table → Wishlist subtab), then **adds
+  that saved place to one of their trips** as a fresh planned stop (`addStopFromPlace` via
+  `TripPickerSheet` — place + kind only, your ranking/take stays yours; snapped to the right
+  city section of the target trip). One-tap stop-copying and whole-trip forking were removed
+  (#72): re-adding a place by hand produces a cleaner row (correct city + kind + your dates), or
 - **shares a profile** via the native share sheet (`lib/share.ts`) — an https link to the
   public `link` Edge Function, which deep-links installed users into the app
   (`zoi://user/<id>`) and shows a get-the-app fallback to everyone else.
@@ -430,9 +445,10 @@ were dead and dropped.
 
 Built: auth + profiles (edit, avatar, share via deep link), the full log + rank loop
 (with required experience dates), trips as city- or day-grouped itineraries (planned
-stops, reorder, graduate-to-ranked, visitor copy/save/fork), Feed with experience + trip
-cards, ExperienceDetail screen, Wishlist + follows/suggested users, map views, photo
-upload to Storage, design system + data layer refactors (PRs #44–46).
+stops with **kinds** — stays/food/transport/experiences — reorder, graduate-to-ranked,
+reliable city grouping via `city_key`, move-to-section, save-place-to-trip), Feed with
+experience + trip cards, ExperienceDetail screen, Wishlist + follows/suggested users, map
+views, photo upload to Storage, design system + data layer refactors (PRs #44–46).
 
 Known debt / next up:
 - `getFeed()` fetches all followed users' experiences + trips client-side (no

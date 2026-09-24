@@ -3,7 +3,7 @@ import { Text, TextProps, TextStyle } from 'react-native';
 import { COLORS, FONT, FONT_SIZE } from '@/constants/theme';
 
 export type TextVariant =
-  | 'display' | 'title' | 'headline' | 'body' | 'subhead' | 'caption' | 'footnote';
+  | 'wordmark' | 'display' | 'title' | 'headline' | 'body' | 'subhead' | 'caption' | 'footnote';
 
 type Props = TextProps & {
   variant?: TextVariant;
@@ -15,6 +15,7 @@ type Props = TextProps & {
 // Variant → size + weight + default color. Screens should use <AppText variant=...>
 // instead of hardcoding fontSize/fontWeight so typography stays centralized.
 const VARIANTS: Record<TextVariant, TextStyle> = {
+  wordmark: { fontSize: FONT_SIZE.wordmark, ...FONT.bold, color: COLORS.text, letterSpacing: -2 },
   display: { fontSize: FONT_SIZE.display, ...FONT.bold, color: COLORS.text, letterSpacing: -0.5 },
   title: { fontSize: FONT_SIZE.title, ...FONT.bold, color: COLORS.text },
   headline: { fontSize: FONT_SIZE.headline, ...FONT.semibold, color: COLORS.text },
