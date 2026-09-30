@@ -5,7 +5,16 @@ import {
 import { Location } from '@/types';
 import { autocompletePlaces, getPlaceDetails, PlaceSuggestion } from '@/lib/places';
 import { AppText } from '@/components/ui/AppText';
+import { useBanner } from '@/contexts/BannerContext';
 import { COLORS, SPACING, RADIUS } from '@/constants/theme';
+
+// Dig the HTTP status out of whatever the places call threw. A non-2xx from the
+// Edge Function arrives as a Supabase FunctionsHttpError carrying the Response on
+// `context`; plain fetch/network failures have neither.
+function statusOf(err: unknown): number | undefined {
+  const e = err as { status?: number; context?: { status?: number } } | null;
+  return e?.status ?? e?.context?.status;
+}
 
 // Places session token groups autocomplete keystrokes + the final details call for billing.
 function newSessionToken(): string {
@@ -23,6 +32,32 @@ export function LocationSearch({ value, onChange }: Props) {
   const [loading, setLoading] = useState(false);
   const sessionToken = useRef(newSessionToken());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { show } = useBanner();
+  // Autocomplete fires on a debounce as you type, so an outage would otherwise
+  // raise a banner per keystroke. Report once, then stay quiet until something
+  // succeeds again.
+  const reported = useRef(false);
+
+  // A failing place lookup used to be swallowed entirely, which made an API-key
+  // or network problem look like "no results" — or, in the add-stop sheet, like a
+  // missing button, since the form only appears once a place is selected.
+  function reportFailure(stage: 'search' | 'select', err: unknown) {
+    const status = statusOf(err);
+    console.warn(
+      `[LocationSearch] place ${stage} failed${status ? ` (HTTP ${status})` : ''}`,
+      status === 403 ? '— Google rejected the key; check the GOOGLE_PLACES_API_KEY function secret' : '',
+      err,
+    );
+    if (stage === 'search' && reported.current) return;
+    reported.current = true;
+    show({
+      title: 'Place search is unavailable',
+      message: status
+        ? `The lookup failed (HTTP ${status}). Try again in a moment.`
+        : 'Check your connection and try again.',
+      icon: 'cloud-offline-outline',
+    });
+  }
 
   useEffect(() => {
     if (value) return; // already selected — stop searching
@@ -35,8 +70,10 @@ export function LocationSearch({ value, onChange }: Props) {
       setLoading(true);
       try {
         setSuggestions(await autocompletePlaces(query, sessionToken.current));
-      } catch {
+        reported.current = false; // search is healthy again
+      } catch (err) {
         setSuggestions([]);
+        reportFailure('search', err);
       } finally {
         setLoading(false);
       }
@@ -53,9 +90,12 @@ export function LocationSearch({ value, onChange }: Props) {
       onChange(loc);
       setSuggestions([]);
       setQuery('');
+      reported.current = false;
       sessionToken.current = newSessionToken(); // fresh session after a completed selection
-    } catch {
-      // swallow — user can retry
+    } catch (err) {
+      // Always surfaced: tapping a suggestion is a deliberate action, so silence
+      // here reads as the app ignoring the tap. Keep the suggestions up to retry.
+      reportFailure('select', err);
     } finally {
       setLoading(false);
     }
