@@ -53,7 +53,8 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      "expo-status-bar"
     ],
     "scheme": "zoi",
     "extra": {
