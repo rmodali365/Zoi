@@ -12,6 +12,12 @@ getaways. Two purposes, equally core:
 
 Solo project, built to move fast.
 
+**Local files live in `~/Desktop/Atlas`.** "Atlas" is a placeholder working name — the
+GitHub repo is `rmodali365/Zoi` and the `Atlas` remote URL redirects to it. The folder will
+be renamed once the real app name is settled, so don't hardcode that absolute path
+anywhere; use paths relative to the repo root. If you're looking for the checkout and
+searching for "zoi", you won't find it.
+
 ## Stack
 
 - **Frontend:** React Native + Expo (SDK 54, RN 0.81), TypeScript (strict), iOS-first
@@ -329,17 +335,68 @@ change — it's a generated snapshot. To change the schema:
 
 1. Add `supabase/migrations/<YYYYMMDDHHMMSS>_desc.sql` (forward-only SQL; prefer
    idempotent guards like `if not exists` / `drop policy if exists`).
-2. Apply to the live DB via the Supabase Management API. **Build the JSON payload with
-   Python** (raw newlines in the JSON string fail silently, returning `[]` with nothing
-   applied). **Use curl, not Python urllib** (Cloudflare 403s urllib):
+
+   **The timestamp must sort after every migration already in the folder — including on
+   `main`.** `db push` applies in filename order and the ledger keys on the version prefix
+   alone, so a *duplicate* timestamp is the dangerous case: the version already reads as
+   applied, and the migration is **silently skipped**. No error, no columns, and CI (if it
+   ever exists) reports success. This bit a long-lived branch once — after any rebase onto
+   `main`, re-check that your timestamp is still the highest.
+
+2. Apply with **`supabase db push`** — *not* the Management API. A hand-applied migration
+   writes the schema but leaves the ledger stale, and the next `db push` then tries to
+   apply it again. (The Management API is still the right tool for ad-hoc *reads* and
+   one-off queries — see `scripts/_supabase.py`'s `run_sql`.)
+
+   The CLI needs a token. Export it rather than logging in interactively, or every
+   invocation triggers macOS keychain and DB-password dialogs:
    ```sh
-   python3 -c "import json; open('/tmp/p.json','w').write(json.dumps({'query': open('supabase/migrations/<file>.sql').read()}))"
-   curl -s -X POST "https://api.supabase.com/v1/projects/<REF>/database/query" \
-     -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" --data @/tmp/p.json
+   export SUPABASE_ACCESS_TOKEN="$(python3 -c "import json;print(json.load(open('.claude/settings.local.json'))['mcpServers']['supabase']['args'][3])")"
+   supabase link --project-ref <ref>
+   cat supabase/.temp/project-ref      # MUST match the project you intend
+   supabase migration list --linked    # expect: your migration pending, everything else applied
+   supabase db push
    ```
-   `[]` = success for DDL.
-3. **Verify** it applied (query `information_schema.columns`).
-4. Update `schema.sql` snapshot to match; commit migration + snapshot together.
+
+3. **Both databases must get it, and both ledgers must record it.** There are two projects
+   (see *Project config & secrets*) and they drift independently. dev is where you work;
+   prod holds real user data and is what the `production` EAS profile talks to. A change
+   that's only on dev means the next production build is broken on arrival.
+
+   Before pushing to prod: **back up first** —
+   `python3 scripts/backup-supabase.py prod` (`supabase db dump` needs Docker, which isn't
+   installed, and there are no managed backups on the free plan — this script *is* the
+   recovery path). Then push, then verify.
+
+   If a ledger is ever missing entries that the schema clearly already has (e.g. a project
+   whose migrations were applied by hand before the ledger existed), backfill rather than
+   push — a push would replay the baseline over a live schema:
+   ```sh
+   for ts in $(ls supabase/migrations/ | sed 's/_.*//'); do
+     supabase migration repair --status applied "$ts"
+   done
+   ```
+   Repair one timestamp per call: **zsh doesn't word-split unquoted expansions**, so
+   passing `$TS` with many versions sends them as a single argument and fails with
+   `LegacyMigrationInvalidVersionError`. And confirm the schema really matches the
+   migrations you're marking applied — otherwise the ledger encodes a state `main` can't
+   rebuild.
+
+4. **Verify** — `python3 scripts/verify-schema.py <dev|prod>`. A migration is only done
+   when this passes, not when `db push` prints success; structural damage is silent. It
+   checks orphans, the app's real PostgREST query shapes, and that SECURITY DEFINER
+   functions stay closed to anon.
+
+5. Update `schema.sql` snapshot to match; commit migration + snapshot together.
+
+6. **Ask whether the change is breaking before promoting it.** Dropping or renaming a
+   column breaks every installed build the moment it lands (`20260813_shared_experiences`
+   was exactly that). Additive changes — new nullable/defaulted columns, new constraints
+   that existing rows satisfy — are safe. For breaking ones, use expand/contract or
+   coordinate the cutover with an immediate `eas build --profile production`.
+
+The full procedure, with the prod-specific rules and secrets table, is the `promote-db`
+skill in `.claude/skills/`; background and history are in `docs/deployment.md`.
 
 ### SECURITY DEFINER functions are PUBLIC by default
 
@@ -433,9 +490,19 @@ were dead and dropped.
 
 ## Project config & secrets
 
-- **Supabase project ref:** `ckfpzzddogzdbjtxmahq`
+- **Supabase projects** (two — they drift independently, see *Database workflow*):
+
+  | | Name | Ref | Used by |
+  |---|---|---|---|
+  | dev | `Zoi` | `ckfpzzddogzdbjtxmahq` | `.env`, EAS `development` + `preview` |
+  | prod | `zoi-prod` | `bpwkbfffbplxyzxpkwva` | EAS `production` — **real user data** |
+
+  Both ledgers are current as of 2026-09-25 (dev's was backfilled that day). The anon key
+  for each is in `eas.json`; `eas.json`'s `production` profile already points at prod, so a
+  production build talks to prod whether or not prod's schema is ready.
 - **Management token + MCP config:** `.claude/settings.local.json` (gitignored — never
-  paste the token into committed files like this one).
+  paste the token into committed files like this one). Export it as
+  `SUPABASE_ACCESS_TOKEN` for CLI work so the keychain stops prompting.
 - **Env vars** (`.env`, gitignored — see `.env.example`):
   `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_GOOGLE_PLACES_API_KEY`.
 - **Auth testing:** SMS uses Supabase test OTPs (no Twilio yet). Test numbers are mapped

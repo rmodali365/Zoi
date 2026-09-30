@@ -23,8 +23,21 @@ building, not after.
 
 ## Status: prod migrated 2026-08-13 ✅
 
-`zoi-prod` is now current through `20260814120000`, with the migration ledger adopted, so
-future promotions are `supabase db push` and nothing else. What the cutover produced:
+> **Update 2026-09-25:** prod is now current through **`20260815000000_stop_kinds_and_city_keys`**
+> (#72 stop kinds + city grouping) and `places` was redeployed again — it had drifted back
+> to two versions behind, exactly as this doc predicted would keep happening without a CI
+> deploy step. Backup taken first: `prod-backup-20260925.json` (118 rows). `verify-schema.py
+> prod` passed; `push_config()` returns both columns non-null. `match-contacts` and `link`
+> were left alone — same version as dev, and `link`'s domain config is prod-specific.
+>
+> That promotion also surfaced the **timestamp-collision hazard** now documented in
+> CLAUDE.md: the migration originally carried `20260812000000`, which prod's ledger already
+> recorded from `collaborative_trips`. `db push` would have reported success and applied
+> **nothing**. It was renamed to `20260815000000` during the rebase.
+
+`zoi-prod` was current through `20260814120000` as of the 2026-08-13 cutover, with the
+migration ledger adopted, so future promotions are `supabase db push` and nothing else.
+What that cutover produced:
 
 - 27 experiences → 27 shared posts + **24 rankings** (the 3 planned stops correctly get
   none). No groups existed on prod, so nothing collapsed. Zero orphans.
@@ -70,22 +83,36 @@ Everything below depends on fixing that first. Once the ledger exists, **stop ap
 migrations through the Management API** — a hand-applied migration leaves the ledger
 stale, and the next `db push` will try to apply it again.
 
-## Part 1 — The migration ledger (done for prod; still owed on dev)
+## Part 1 — The migration ledger (done on both) ✅
 
-Prod's ledger was backfilled on 2026-08-13. **Dev has not been done** — it still has no
-`supabase_migrations` schema, so `db push` against dev would try to replay everything from
-the baseline. Do this before ever pushing to dev:
+Prod's ledger was backfilled on 2026-08-13; **dev's on 2026-09-25**, once
+`feat/trip-stop-kinds` had merged and dev's schema finally matched a migration history
+`main` could rebuild. Both now report all 15 migrations applied, 0 pending, so `db push`
+is safe against either.
+
+How dev's was done, for reference if a third project ever appears:
 
 ```sh
-supabase login                                     # the access token alone isn't enough
+export SUPABASE_ACCESS_TOKEN="$(python3 -c "import json;print(json.load(open('.claude/settings.local.json'))['mcpServers']['supabase']['args'][3])")"
 supabase link --project-ref ckfpzzddogzdbjtxmahq
-supabase migration repair --status applied <every timestamp in supabase/migrations/>
-supabase migration list                            # expect: all applied, 0 pending
+cat supabase/.temp/project-ref          # confirm before repairing
+# one timestamp per call — zsh doesn't word-split unquoted expansions, so passing them
+# all at once sends a single argument and fails with LegacyMigrationInvalidVersionError
+for ts in $(ls supabase/migrations/ | sed 's/_.*//'); do
+  supabase migration repair --status applied "$ts"
+done
+supabase migration list --linked         # expect: all applied, 0 pending
 ```
 
-Dev also carries `kind` / `details` / `city_key` from the unmerged `feat/trip-stop-kinds`
-branch, so its schema doesn't match any merged migration. Resolve that branch before
-repairing dev, or the ledger will encode a state main can't rebuild.
+Exporting the token is what avoids `supabase login` and the keychain/DB-password dialogs.
+
+**Verify the schema before marking anything applied.** Dev used to carry
+`kind`/`details`/`city_key` from the then-unmerged `feat/trip-stop-kinds` branch, which
+would have encoded a state `main` couldn't rebuild. The check was to confirm each
+migration's effects were actually present — `trip_members` and `device_tokens` exist,
+`experience_rankings` exists with `created_by`, the flat `sentiment`/`rank_key`/
+`quick_take`/`photos` columns and the old `user_id` are gone, `experience_tags` is gone
+(created by `20260812120000`, dropped by `20260813000000`) — and only then repair.
 
 ## Part 2 — Promoting (the routine, now that the ledger exists)
 
