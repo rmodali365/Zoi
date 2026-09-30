@@ -631,6 +631,16 @@ export function TripDetailScreen({ navigation, route }: Props) {
                   multiline
                 />
 
+              </ScrollView>
+            )}
+
+            {/* Section preview + primary action live OUTSIDE the scroll area so
+                they're always reachable. A 'stay' adds check-in, check-out and a
+                confirmation field, which overflows addScroll's maxHeight and used
+                to push "Add to itinerary" clean out of view — the kinds with fewer
+                fields fit, so the button only went missing for logistics stops. */}
+            {!!newLoc && (
+              <>
                 {!!previewLabel && (
                   <AppText variant="subhead" weight="regular" color={COLORS.textSecondary} style={styles.previewLine}>
                     Adding to <AppText variant="subhead" weight="semibold" color={COLORS.text}>{previewLabel}</AppText>
@@ -647,7 +657,7 @@ export function TripDetailScreen({ navigation, route }: Props) {
                     ? <ActivityIndicator color={COLORS.surface} />
                     : <AppText variant="body" weight="semibold" color={COLORS.surface}>Add to itinerary</AppText>}
                 </TouchableOpacity>
-              </ScrollView>
+              </>
             )}
 
             {newKind === 'experience' && (
